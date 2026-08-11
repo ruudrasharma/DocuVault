@@ -29,6 +29,15 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth.login'
 
+# Fix session cookies for OAuth behind reverse proxy (Tailscale → Nginx → Gunicorn)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # Nginx handles TLS, Flask sees HTTP
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+# ProxyFix: tell Flask to trust X-Forwarded-Proto/Host headers from Nginx
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_prefix=1)
+
 # Initialize OAuth
 oauth = OAuth(app)
 google_oauth = oauth.register(

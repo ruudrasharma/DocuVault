@@ -109,10 +109,8 @@ def get_role():
 @auth_bp.route('/auth/google')
 def google_login():
     from . import google_oauth
-    # Use hardcoded base URL to avoid reverse-proxy URL confusion
     base_url = os.environ.get('APP_BASE_URL', request.host_url.rstrip('/'))
     redirect_uri = base_url + '/auth/google/callback'
-    session['oauth_redirect_uri'] = redirect_uri  # Store for callback
     return google_oauth.authorize_redirect(redirect_uri)
 
 
@@ -120,10 +118,7 @@ def google_login():
 def google_callback():
     from . import google_oauth
     try:
-        # Must pass same redirect_uri used in authorize_redirect
-        base_url = os.environ.get('APP_BASE_URL', request.host_url.rstrip('/'))
-        redirect_uri = session.pop('oauth_redirect_uri', base_url + '/auth/google/callback')
-        token = google_oauth.authorize_access_token(redirect_uri=redirect_uri)
+        token = google_oauth.authorize_access_token()
         user_info = token.get('userinfo')
         if not user_info:
             flash('Google sign-in failed. Please try again.', 'error')
