@@ -150,13 +150,14 @@ def google_callback():
 
             user = User(
                 username=username,
+                password_hash='',   # No password for OAuth users
+                salt='',            # No salt for OAuth users
                 oauth_provider='google',
                 google_id=google_id,
                 google_email=email,
                 google_name=name,
                 google_avatar=avatar,
                 role='verifier',
-                salt=None,
             )
             db.session.add(user)
             db.session.commit()
