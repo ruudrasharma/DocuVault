@@ -1,0 +1,78 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+
+# === Virtual Environments ===
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# === Flask / App Runtime ===
+instance/
+.env
+*.db
+*.sqlite3
+
+# === Uploaded / Generated Data (runtime) ===
+data/
+ocr_debug.log
+app/ocr_debug.log
+
+# === ML Model Cache (large binary - included in repo, but exclude temp outputs) ===
+# app/models/anomaly_models.pkl  <-- intentionally INCLUDED in git
+# marksheet_model.pkl           <-- intentionally INCLUDED in git
+
+# === Blockchain Runtime Data ===
+# blockchain_data/chain.json is included (initial genesis state)
+
+# === Native / Compiled Libraries (must be compiled on target machine) ===
+liboqs/
+liboqs-python/
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# === IDEs ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# === Temporary / Junk Files ===
+SELECT
+app/se
+*.log
+*.tmp
+*.bak
+*.orig
+
+# === Test / Coverage ===
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# === Jupyter ===
+.ipynb_checkpoints/
+
+# === Node (if any frontend tooling is added) ===
+node_modules/
+npm-debug.log*
