@@ -1,93 +1,322 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
-from .database import User
+# app/auth.py
+from flask import (Blueprint, render_template, request, redirect,
+                   url_for, flash, session, jsonify, current_app)
+from .database import User, PendingAccount
 from . import db
 from functools import wraps
+import qrcode
+import io
+import base64
+import uuid
+import hashlib
+import logging
 
+logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
+
+
+# ── Decorators ────────────────────────────────────────────────────────────────
 
 def login_required(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated
 
 def role_required(*roles):
     def decorator(f):
         @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_role = session.get('role')
-            if user_role not in roles:
-                flash('Insufficient permissions')
+        def decorated(*args, **kwargs):
+            if session.get('role') not in roles:
+                flash('Insufficient permissions', 'error')
                 return redirect(url_for('auth.login'))
             return f(*args, **kwargs)
-        return decorated_function
+        return decorated
     return decorator
+
+
+# ── QR Code helper ────────────────────────────────────────────────────────────
+
+def make_qr_base64(uri):
+    """Generate a base64-encoded PNG QR code from a TOTP URI."""
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
+
+
+# ── Local auth ────────────────────────────────────────────────────────────────
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    if 'user_id' in session:
+        return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
         user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
+        if user and user.oauth_provider == 'local' and user.check_password(password):
             session['user_id'] = user.id
             session['role'] = user.role
+            session['username'] = user.username
             return redirect(url_for('auth.verify_2fa'))
-        flash('Invalid credentials')
+        flash('Invalid credentials', 'error')
     return render_template('login.html')
+
 
 @auth_bp.route('/verify_2fa', methods=['GET', 'POST'])
 def verify_2fa():
     if 'user_id' not in session:
         return redirect(url_for('auth.login'))
     if request.method == 'POST':
-        token = request.form['totp']
+        token = request.form.get('totp', '').strip()
         user = User.query.get(session['user_id'])
-        if user.verify_totp(token):
+        if user and user.verify_totp(token):
+            session['verified'] = True
             return redirect(url_for('main.dashboard', role=session['role']))
-        flash('Invalid TOTP')
+        flash('Invalid or expired OTP code. Try again.', 'error')
     return render_template('verify_2fa.html')
 
-@auth_bp.route('/logout', methods=['POST'])
+
+@auth_bp.route('/logout', methods=['GET', 'POST'])
 def logout():
     session.clear()
-    return jsonify({'success': True})
+    if request.method == 'POST':
+        return jsonify({'success': True})
+    return redirect(url_for('auth.login'))
 
-@auth_bp.route('/get_role', methods=['GET'])
+
+@auth_bp.route('/get_role')
 @login_required
 def get_role():
-    return jsonify({'role': session.get('role')})
+    user = User.query.get(session['user_id'])
+    return jsonify({
+        'role': session.get('role'),
+        'username': session.get('username'),
+        'oauth_provider': user.oauth_provider if user else 'local',
+        'google_name': user.google_name if user else None,
+        'google_avatar': user.google_avatar if user else None,
+    })
 
-@auth_bp.route('/admin/add_user', methods=['POST'])
+
+# ── Google OAuth ──────────────────────────────────────────────────────────────
+
+@auth_bp.route('/auth/google')
+def google_login():
+    from . import google_oauth
+    redirect_uri = url_for('auth.google_callback', _external=True)
+    return google_oauth.authorize_redirect(redirect_uri)
+
+
+@auth_bp.route('/auth/google/callback')
+def google_callback():
+    from . import google_oauth
+    try:
+        token = google_oauth.authorize_access_token()
+        user_info = token.get('userinfo')
+        if not user_info:
+            flash('Google sign-in failed. Please try again.', 'error')
+            return redirect(url_for('auth.login'))
+
+        google_id = user_info.get('sub')
+        email = user_info.get('email', '')
+        name = user_info.get('name', email.split('@')[0])
+        avatar = user_info.get('picture', '')
+
+        # Find existing user by google_id
+        user = User.query.filter_by(google_id=google_id).first()
+
+        if not user:
+            # Check if email already exists as local user
+            user = User.query.filter_by(google_email=email).first()
+            if user and user.oauth_provider == 'local':
+                flash('This email is linked to a local account. Please sign in with username & password.', 'error')
+                return redirect(url_for('auth.login'))
+
+            # Auto-create verifier account
+            username = email.split('@')[0].replace('.', '_').replace('-', '_')
+            # Make username unique if taken
+            base_username = username
+            count = 1
+            while User.query.filter_by(username=username).first():
+                username = f'{base_username}_{count}'
+                count += 1
+
+            user = User(
+                username=username,
+                oauth_provider='google',
+                google_id=google_id,
+                google_email=email,
+                google_name=name,
+                google_avatar=avatar,
+                role='verifier',
+                salt=None,
+            )
+            db.session.add(user)
+            db.session.commit()
+            logger.info(f'New verifier account created via Google OAuth: {username} ({email})')
+        else:
+            # Update profile info
+            user.google_name = name
+            user.google_avatar = avatar
+            db.session.commit()
+
+        session['user_id'] = user.id
+        session['role'] = user.role
+        session['username'] = user.username
+        session['verified'] = True  # Google auth = no 2FA needed
+        return redirect(url_for('main.dashboard', role=user.role))
+
+    except Exception as e:
+        logger.error(f'Google OAuth error: {e}')
+        flash('Google sign-in failed. Please try again.', 'error')
+        return redirect(url_for('auth.login'))
+
+
+# ── Admin: Account Management ─────────────────────────────────────────────────
+
+@auth_bp.route('/admin/init-account', methods=['POST'])
 @login_required
 @role_required('admin')
-def add_user():
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    role = data.get('role')
-    if role not in {'admin', 'institution', 'verifier'}:
-        return jsonify({'error': 'Invalid role'}), 400
+def admin_init_account():
+    """Step 1: Admin submits username+password+role → returns TOTP QR code."""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    role = data.get('role', '')
+
+    if not username or not password or role not in ('admin', 'institution'):
+        return jsonify({'error': 'Invalid input. Role must be admin or institution.'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters.'}), 400
     if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'User already exists'}), 400
-    user = User(username=username, role=role)
-    user.set_password(password)
-    totp_secret = user.generate_totp_secret()
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({'secret': totp_secret})
+        return jsonify({'error': f'Username "{username}" is already taken.'}), 409
 
-@auth_bp.route('/admin/recover_2fa', methods=['POST'])
+    # Delete any old pending entry for same username
+    PendingAccount.query.filter_by(username=username).delete()
+
+    import pyotp
+    salt = uuid.uuid4().hex
+    pw_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+    totp_secret = pyotp.random_base32()
+
+    pending = PendingAccount(
+        id=str(uuid.uuid4()),
+        username=username,
+        password_hash=pw_hash,
+        salt=salt,
+        role=role,
+        totp_secret=totp_secret,
+        created_by=session['user_id'],
+    )
+    db.session.add(pending)
+    db.session.commit()
+
+    # Build TOTP URI + QR
+    totp_uri = pyotp.TOTP(totp_secret).provisioning_uri(
+        name=username, issuer_name='DocuVault'
+    )
+    qr_b64 = make_qr_base64(totp_uri)
+
+    return jsonify({
+        'pending_id': pending.id,
+        'totp_secret': totp_secret,
+        'totp_uri': totp_uri,
+        'qr_code': qr_b64,
+    })
+
+
+@auth_bp.route('/admin/confirm-account', methods=['POST'])
 @login_required
 @role_required('admin')
-def recover_2fa():
-    data = request.json
-    user_id = data.get('user_id')
+def admin_confirm_account():
+    """Step 2: Verify OTP entered by the new user → create the account."""
+    data = request.get_json()
+    pending_id = data.get('pending_id')
+    otp = data.get('otp', '').strip()
+
+    pending = PendingAccount.query.get(pending_id)
+    if not pending:
+        return jsonify({'error': 'Session expired. Please start again.'}), 404
+    if pending.is_expired():
+        db.session.delete(pending)
+        db.session.commit()
+        return jsonify({'error': 'This setup session expired (1 hour limit). Start again.'}), 410
+
+    if not pending.verify_otp(otp):
+        return jsonify({'error': 'Wrong OTP code. Ask the person to check their authenticator app.'}), 400
+
+    # OTP correct → create the real user
+    if User.query.filter_by(username=pending.username).first():
+        return jsonify({'error': 'Username already exists (race condition). Try again.'}), 409
+
+    user = User(
+        username=pending.username,
+        password_hash=pending.password_hash,
+        salt=pending.salt,
+        role=pending.role,
+        totp_secret=pending.totp_secret,
+        oauth_provider='local',
+    )
+    db.session.add(user)
+    db.session.delete(pending)
+    db.session.commit()
+
+    logger.info(f'Account created by admin {session["username"]}: {user.username} ({user.role})')
+    return jsonify({'success': True, 'username': user.username, 'role': user.role})
+
+
+@auth_bp.route('/admin/regenerate-secret', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_regenerate_secret():
+    """Regenerate TOTP secret for a pending account (if user can't scan)."""
+    data = request.get_json()
+    pending_id = data.get('pending_id')
+    pending = PendingAccount.query.get(pending_id)
+    if not pending:
+        return jsonify({'error': 'Session not found. Start over.'}), 404
+
+    import pyotp
+    pending.totp_secret = pyotp.random_base32()
+    db.session.commit()
+
+    totp_uri = pyotp.TOTP(pending.totp_secret).provisioning_uri(
+        name=pending.username, issuer_name='DocuVault'
+    )
+    qr_b64 = make_qr_base64(totp_uri)
+    return jsonify({
+        'totp_secret': pending.totp_secret,
+        'qr_code': qr_b64,
+    })
+
+
+@auth_bp.route('/admin/users', methods=['GET'])
+@login_required
+@role_required('admin')
+def admin_users():
+    users = User.query.filter(User.role != 'student').order_by(User.role, User.username).all()
+    return jsonify([{
+        'id': u.id,
+        'username': u.username,
+        'role': u.role,
+        'provider': u.oauth_provider,
+        'email': u.google_email,
+        'name': u.google_name,
+    } for u in users])
+
+
+@auth_bp.route('/admin/delete-user/<int:user_id>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def admin_delete_user(user_id):
+    if user_id == session['user_id']:
+        return jsonify({'error': 'Cannot delete your own account.'}), 400
     user = User.query.get(user_id)
     if not user:
-        return jsonify({'error': 'User not found'}), 404
-    totp_secret = user.generate_totp_secret()
+        return jsonify({'error': 'User not found.'}), 404
+    db.session.delete(user)
     db.session.commit()
-    return jsonify({'new_secret': totp_secret})
+    return jsonify({'success': True})

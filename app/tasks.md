@@ -1,0 +1,7 @@
+- [x] requirements.txt - add authlib
+- [ ] app/__init__.py - add OAuth setup
+- [ ] app/database.py - add google_id/email/oauth_provider + PendingAccount model
+- [ ] app/auth.py - Google OAuth routes + admin create-account routes
+- [ ] app/templates/login.html - Google sign-in button
+- [ ] app/templates/index.html - Admin panel for account creation
+- [ ] .env + server .env - add GOOGLE_CLIENT_ID/SECRET

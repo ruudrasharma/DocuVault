@@ -610,7 +610,192 @@
   });
 </script>
 
-<script src="{{ url_for('static', filename='script.js') }}"></script>
+<!-- ══════════════════════════════════════════════════════════════
+     ADMIN PANEL MODAL
+════════════════════════════════════════════════════════════════ -->
+<div id="admin-panel-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);z-index:2000;overflow-y:auto">
+  <div style="min-height:100%;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px">
+    <div style="background:var(--surface);border-radius:20px;border:1px solid var(--border);width:100%;max-width:560px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.3)">
 
+      <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);padding:28px 32px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:4px">Admin Portal</div>
+          <h2 style="color:#fff;font-size:20px;margin:0">Account Management</h2>
+        </div>
+        <button onclick="closeAdminPanel()" style="background:rgba(255,255,255,0.12);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">&times;</button>
+      </div>
+
+      <div style="padding:32px">
+
+        <!-- Step 1: Create Account Form -->
+        <div id="admin-step-1">
+          <h3 style="font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Create New Account</h3>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">The person will scan a QR code to set up 2FA before the account is activated.</p>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">USERNAME</label>
+              <input id="new-username" type="text" placeholder="e.g. iit_bombay" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:14px;background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">PASSWORD</label>
+              <input id="new-password" type="password" placeholder="Min. 8 characters" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:14px;background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">ROLE</label>
+              <select id="new-role" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:14px;background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box">
+                <option value="institution">Institution</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div id="create-err" style="display:none;padding:10px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius-md);color:#DC2626;font-size:13px"></div>
+            <button id="create-btn" onclick="adminInitAccount()" style="padding:12px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">
+              Generate 2FA Setup &rarr;
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: QR Code + OTP -->
+        <div id="admin-step-2" style="display:none">
+          <div style="text-align:center;margin-bottom:20px">
+            <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:6px">Scan QR Code</h3>
+            <p style="font-size:13px;color:var(--text-muted)">Ask <strong id="pending-username-label"></strong> to scan this with Google Authenticator or Authy, then enter the 6-digit code.</p>
+          </div>
+          <div style="text-align:center;margin:20px 0">
+            <img id="qr-img" src="" alt="TOTP QR Code" style="width:200px;height:200px;border-radius:12px;border:4px solid var(--border)">
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:20px;text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Or enter key manually</div>
+            <code id="totp-secret-display" style="font-family:var(--font-mono);font-size:15px;color:var(--text-primary);letter-spacing:0.08em;word-break:break-all"></code>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">6-DIGIT OTP FROM AUTHENTICATOR</label>
+            <input id="otp-input" type="text" maxlength="6" inputmode="numeric" placeholder="_ _ _ _ _ _"
+              style="width:100%;padding:14px;text-align:center;letter-spacing:0.3em;font-size:22px;font-family:var(--font-mono);border:2px solid var(--border);border-radius:var(--radius-md);background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box"
+              oninput="this.value=this.value.replace(/\D/g,'');if(this.value.length===6)adminConfirmAccount()">
+          </div>
+          <div id="otp-err" style="display:none;padding:10px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius-md);color:#DC2626;font-size:13px;margin-bottom:14px"></div>
+          <div style="display:flex;gap:10px">
+            <button onclick="adminRegenerateSecret()" style="flex:1;padding:11px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer">New QR Code</button>
+            <button id="confirm-btn" onclick="adminConfirmAccount()" style="flex:2;padding:11px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">Confirm &amp; Create Account</button>
+          </div>
+          <button onclick="showStep1()" style="margin-top:10px;width:100%;padding:9px;background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer">&larr; Back</button>
+        </div>
+
+        <!-- Step 3: Success -->
+        <div id="admin-step-3" style="display:none;text-align:center;padding:20px 0">
+          <div style="width:72px;height:72px;background:#ECFDF5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h3 style="font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Account Created!</h3>
+          <p id="success-msg" style="font-size:14px;color:var(--text-muted);margin-bottom:24px"></p>
+          <button onclick="showStep1()" style="padding:11px 24px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">Create Another</button>
+        </div>
+
+        <!-- User List -->
+        <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h3 style="font-size:14px;font-weight:600;color:var(--text-primary)">Existing Accounts</h3>
+            <button onclick="loadUserList()" style="font-size:12px;color:#2563EB;background:none;border:none;cursor:pointer;font-weight:500">Refresh</button>
+          </div>
+          <div id="user-list" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto">
+            <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:20px">Loading&hellip;</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin FAB Button -->
+<button id="admin-panel-btn" onclick="openAdminPanel()" style="display:none;position:fixed;bottom:28px;right:28px;z-index:1000;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:14px;padding:13px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 20px rgba(37,99,235,0.45);align-items:center;gap:8px;transition:transform 0.2s,box-shadow 0.2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+  Manage Accounts
+</button>
+
+<script>
+let _pendingId = null;
+
+function openAdminPanel() { document.getElementById('admin-panel-overlay').style.display='block'; loadUserList(); }
+function closeAdminPanel() { document.getElementById('admin-panel-overlay').style.display='none'; }
+function showStep1() {
+  document.getElementById('admin-step-1').style.display='block';
+  document.getElementById('admin-step-2').style.display='none';
+  document.getElementById('admin-step-3').style.display='none';
+  document.getElementById('create-err').style.display='none';
+  document.getElementById('new-username').value='';
+  document.getElementById('new-password').value='';
+  _pendingId=null;
+}
+
+async function adminInitAccount() {
+  const btn=document.getElementById('create-btn'), errEl=document.getElementById('create-err');
+  errEl.style.display='none'; btn.textContent='Generating…'; btn.disabled=true;
+  try {
+    const res=await fetch('/admin/init-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('new-username').value.trim(),password:document.getElementById('new-password').value,role:document.getElementById('new-role').value})});
+    const data=await res.json();
+    if(!res.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+    _pendingId=data.pending_id;
+    document.getElementById('qr-img').src='data:image/png;base64,'+data.qr_code;
+    document.getElementById('totp-secret-display').textContent=data.totp_secret;
+    document.getElementById('pending-username-label').textContent=document.getElementById('new-username').value.trim();
+    document.getElementById('otp-input').value='';
+    document.getElementById('otp-err').style.display='none';
+    document.getElementById('admin-step-1').style.display='none';
+    document.getElementById('admin-step-2').style.display='block';
+  } catch(e){errEl.textContent='Network error.';errEl.style.display='block';}
+  finally{btn.textContent='Generate 2FA Setup \u2192';btn.disabled=false;}
+}
+
+async function adminConfirmAccount() {
+  const btn=document.getElementById('confirm-btn'),errEl=document.getElementById('otp-err');
+  const otp=document.getElementById('otp-input').value.trim();
+  errEl.style.display='none';
+  if(otp.length!==6){errEl.textContent='Enter the full 6-digit code.';errEl.style.display='block';return;}
+  btn.textContent='Verifying…';btn.disabled=true;
+  try {
+    const res=await fetch('/admin/confirm-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pending_id:_pendingId,otp})});
+    const data=await res.json();
+    if(!res.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+    document.getElementById('success-msg').textContent='"'+data.username+'" ('+data.role+') is ready to log in.';
+    document.getElementById('admin-step-2').style.display='none';
+    document.getElementById('admin-step-3').style.display='block';
+    loadUserList();
+  } catch(e){errEl.textContent='Network error.';errEl.style.display='block';}
+  finally{btn.textContent='Confirm \u0026 Create Account';btn.disabled=false;}
+}
+
+async function adminRegenerateSecret() {
+  const res=await fetch('/admin/regenerate-secret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pending_id:_pendingId})});
+  const data=await res.json();
+  if(res.ok){document.getElementById('qr-img').src='data:image/png;base64,'+data.qr_code;document.getElementById('totp-secret-display').textContent=data.totp_secret;document.getElementById('otp-input').value='';document.getElementById('otp-err').style.display='none';}
+}
+
+async function loadUserList() {
+  const el=document.getElementById('user-list');
+  el.innerHTML='<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px">Loading\u2026</div>';
+  try {
+    const res=await fetch('/admin/users');const users=await res.json();
+    const rc={admin:'#DC2626',institution:'#D97706',verifier:'#2563EB'};
+    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:var(--radius-md);border:1px solid var(--border)"><div style="width:34px;height:34px;border-radius:50%;background:${rc[u.role]||'#6B7280'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${rc[u.role]||'#6B7280'}">${u.role==='admin'?'AD':u.role==='institution'?'IN':'VR'}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:11px;color:var(--text-muted)">${u.provider==='google'?'&#128309; Google':'&#128272; Local'} &middot; <span style="color:${rc[u.role]||'#6B7280'};font-weight:600">${u.role}</span></div></div><button onclick="deleteUser(${u.id},'${u.username}')" style="background:none;border:1px solid #FECACA;border-radius:8px;padding:5px 10px;color:#DC2626;font-size:11px;cursor:pointer">Delete</button></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px">No users found.</div>';
+  } catch(e){el.innerHTML='<div style="color:#DC2626;padding:16px;font-size:13px">Failed to load.</div>';}
+}
+
+async function deleteUser(id,username) {
+  if(!confirm('Delete user "'+username+'"? This cannot be undone.')) return;
+  const res=await fetch('/admin/delete-user/'+id,{method:'DELETE'});
+  const data=await res.json();
+  if(res.ok)loadUserList();else alert(data.error||'Delete failed.');
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  setTimeout(async()=>{
+    try{const res=await fetch('/get_role');const data=await res.json();if(data.role==='admin'){const btn=document.getElementById('admin-panel-btn');if(btn)btn.style.display='flex';}}catch(e){}
+  },800);
+});
+</script>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
