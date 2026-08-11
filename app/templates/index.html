@@ -161,8 +161,7 @@
           <div class="panel-title">Document Upload</div>
         </div>
         <div class="panel-body">
-          <form method="POST" action="/upload" enctype="multipart/form-data" id="upload-form">
-
+          <form id="upload-form" enctype="multipart/form-data">
             <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-inp').click()">
               <div class="upload-icon" id="upload-icon-wrap">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -199,7 +198,7 @@
                   <input type="date" name="issue_date" class="form-input" style="padding-left:16px" required>
                 </div>
               </div>
-              <div id="upload-error" class="flash-msg flash-error" style="display:none"></div>
+              <div id="upload-result"></div>
               <button type="submit" class="btn-primary" id="upload-btn">
                 <span id="upload-btn-text">⟶ REGISTER ON BLOCKCHAIN</span>
               </button>
@@ -249,7 +248,7 @@
 
             <!-- By file form -->
             <div id="verify-file-form" style="display:none">
-              <form method="POST" action="/verify_document" enctype="multipart/form-data" id="verify-file-form-el">
+              <form id="verify-file-form-el" enctype="multipart/form-data">
                 <div class="upload-zone" onclick="document.getElementById('verify-file-inp').click()" style="padding:24px">
                   <div class="upload-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/></svg></div>
                   <div class="upload-title" id="vf-title" style="font-size:13px">Drop file to verify</div>
@@ -611,8 +610,95 @@ if(dropZone) {
 const vfInp = document.getElementById('verify-file-inp');
 if(vfInp) vfInp.addEventListener('change',e=>{ const f=e.target.files[0]; if(f) document.getElementById('vf-title').textContent='📄 '+f.name; });
 
-document.getElementById('upload-form')?.addEventListener('submit',()=>{
-  document.getElementById('upload-btn-text').textContent='▶ REGISTERING...';
+// ── Upload AJAX ────────────────────────────────────────────────
+document.getElementById('upload-form')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('upload-btn');
+  const btnText = document.getElementById('upload-btn-text');
+  const resultEl = document.getElementById('upload-result');
+  const fileInp2 = document.getElementById('file-inp');
+
+  if (!fileInp2.files[0]) {
+    resultEl.innerHTML = '<div class="flash-msg flash-error">Please select a file first.</div>';
+    return;
+  }
+
+  btnText.textContent = '▶ REGISTERING...';
+  btn.disabled = true;
+  resultEl.innerHTML = '<div style="text-align:center;padding:16px;font-family:var(--font-mono);font-size:12px;color:var(--cyan)">▶ Hashing &amp; writing to blockchain<span class="typing-cursor"></span></div>';
+
+  const formData = new FormData(this);
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.innerHTML = `<div class="flash-msg flash-error">${data.error}</div>`;
+    } else {
+      resultEl.innerHTML = `<div class="verify-result verify-success" style="margin-top:0">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div class="result-icon ok" style="width:36px;height:36px;font-size:18px;flex-shrink:0">✓</div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--green);letter-spacing:0.06em">REGISTERED ON BLOCKCHAIN</div>
+            <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">Record ID: ${data.id || 'N/A'}</div>
+          </div>
+        </div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:var(--r-sm);padding:10px 12px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px">BLOCKCHAIN HASH</div>
+          <code style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);word-break:break-all">${data.hash || 'N/A'}</code>
+        </div>
+      </div>`;
+      this.reset();
+      document.getElementById('upload-title').textContent = 'Drop file here or click to browse';
+    }
+  } catch (err) {
+    resultEl.innerHTML = '<div class="flash-msg flash-error">Network error — check connection.</div>';
+  } finally {
+    btnText.textContent = '⟶ REGISTER ON BLOCKCHAIN';
+    btn.disabled = false;
+  }
+});
+
+// ── Verify file AJAX ───────────────────────────────────────────
+document.getElementById('verify-file-form-el')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const resultEl = document.getElementById('verify-result');
+  const vfInp2 = document.getElementById('verify-file-inp');
+  if (!vfInp2?.files[0]) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<div class="flash-msg flash-error">Please select a file to verify.</div>';
+    return;
+  }
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div style="text-align:center;padding:24px;font-family:var(--font-mono);font-size:12px;color:var(--cyan)">▶ Querying blockchain<span class="typing-cursor"></span></div>';
+  const fd = new FormData();
+  fd.append('file', vfInp2.files[0]);
+  try {
+    const res = await fetch('/verify_document', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.innerHTML = `<div class="flash-msg flash-error">${data.error}</div>`;
+      return;
+    }
+    if (data.verified) {
+      resultEl.innerHTML = `<div class="verify-result verify-success" style="text-align:center">
+        <div class="result-icon ok">✓</div>
+        <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--green);letter-spacing:0.08em">DOCUMENT VERIFIED</div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;text-align:left">
+          ${data.holder_name ? `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11px;font-family:var(--font-mono)"><span style="color:var(--text-muted)">Holder</span><span style="color:var(--text-primary)">${data.holder_name}</span></div>` : ''}
+          ${data.doc_type ? `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11px;font-family:var(--font-mono)"><span style="color:var(--text-muted)">Type</span><span style="color:var(--text-primary)">${data.doc_type}</span></div>` : ''}
+          ${data.issue_date ? `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11px;font-family:var(--font-mono)"><span style="color:var(--text-muted)">Issued</span><span style="color:var(--text-primary)">${data.issue_date}</span></div>` : ''}
+        </div>
+      </div>`;
+    } else {
+      resultEl.innerHTML = `<div class="verify-result verify-fail" style="text-align:center">
+        <div class="result-icon fail">✗</div>
+        <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:#F87171;letter-spacing:0.08em">NOT FOUND</div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">No matching record on blockchain</div>
+      </div>`;
+    }
+  } catch (err) {
+    resultEl.innerHTML = '<div class="flash-msg flash-error">Network error. Try again.</div>';
+  }
 });
 
 // ── Admin panel ────────────────────────────────────────────────
