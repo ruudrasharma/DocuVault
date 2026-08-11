@@ -16,6 +16,6 @@ torch==2.2.2
 pdf2image==1.16.0
 scikit-learn==1.5.2
 numpy==1.26.4
-ray==2.9.3
+ray>=2.31.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
