@@ -4,798 +4,684 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — DOCUVault</title>
-  <meta name="description" content="DOCUVault — Blockchain document verification dashboard.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta name="description" content="DocuVault — Blockchain document verification dashboard.">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
-  <style>
-    body { background: var(--bg); }
-
-    .main-content-wrap {
-      margin-left: 64px;
-      margin-top: 60px;
-      padding: 36px;
-      min-height: calc(100vh - 60px);
-      background:
-        radial-gradient(circle at 90% 0%, rgba(37,99,235,0.045) 0%, transparent 38%),
-        transparent;
-    }
-
-    /* Nav ribbon hover expansion */
-    .nav-ribbon:hover ~ .topbar,
-    .nav-ribbon:hover ~ .main-content-wrap {
-      /* keep layout stable */
-    }
-
-    /* Smooth panel fade */
-    .panel {
-      animation: panelIn 0.28s var(--ease-smooth) both;
-    }
-
-    @keyframes panelIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Section heading */
-    .section-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 20px;
-      gap: 16px;
-    }
-
-    .section-heading h3 {
-      font-size: 17px;
-      color: var(--text-primary);
-    }
-
-    /* Upload action bar */
-    .action-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 24px;
-      flex-wrap: wrap;
-    }
-
-    /* Verify form sections */
-    .verify-form-block {
-      display: none;
-      animation: panelIn 0.2s var(--ease-smooth) both;
-    }
-
-    .verify-form-block.visible { display: block; }
-
-    /* Info banner */
-    .info-banner {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      background: var(--accent-soft);
-      border: 1px solid #BFDBFE;
-      border-radius: var(--radius-lg);
-      padding: 14px 16px;
-      font-size: 13px;
-      color: var(--accent);
-      margin-bottom: 20px;
-    }
-
-    .info-banner svg { flex-shrink: 0; margin-top: 1px; }
-
-    /* Result container */
-    #result-container {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 24px;
-    }
-
-    /* Admin result area */
-    #admin-result {
-      margin-top: 20px;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .main-content-wrap { padding: 20px 16px; }
-      .nav-ribbon { display: none; }
-      .topbar { left: 0; }
-    }
-
-    /* Topbar eyebrow */
-    #topbar-eyebrow {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--accent);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-  </style>
 </head>
-<body class="bg-sentinel">
+<body>
 
-<!-- ════════════════════════════════════════════════════════
-     LEFT NAVIGATION RIBBON
-     ════════════════════════════════════════════════════════ -->
-<nav class="nav-ribbon" id="nav-ribbon" aria-label="Main navigation">
+<!-- Ambient -->
+<div class="grid-bg"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+<div class="scanlines"></div>
+<canvas class="particles-canvas" id="particles"></canvas>
 
-  <!-- Brand -->
-  <div class="nav-brand" title="DOCUVault" style="background:transparent;border:none;width:40px;height:40px;padding:0">
-    <img src="{{ url_for('static', filename='logo.png') }}" alt="DOCUVault" style="width:40px;height:40px;object-fit:contain;filter:drop-shadow(0 2px 8px rgba(37,99,235,0.4))">
-    <span class="nav-brand-label">DOCUVault</span>
+<!-- ── Top Bar ── -->
+<header class="topbar">
+  <div class="topbar-logo glitch" data-text="DOCUVAULT">DOCUVAULT</div>
+  <div class="topbar-sep"></div>
+  <div class="chain-badge" style="font-size:10px">
+    <div class="chain-dot"></div>
+    <span id="chain-status">Blockchain Online</span>
   </div>
-
-  <div class="nav-divider"></div>
-
-  <!-- Dashboard / Overview -->
-  <button class="nav-item active" data-nav="verify" onclick="switchPanel('verify')" title="Verify Document" aria-label="Verify Document">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-    <span class="nav-label">Verify</span>
-  </button>
-
-  <!-- Upload (institution / admin) -->
-  <button class="nav-item" data-nav="upload" onclick="switchPanel('upload')" title="Upload Document" aria-label="Upload Document">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-    <span class="nav-label">Upload</span>
-  </button>
-
-  <!-- Admin -->
-  <button class="nav-item" data-nav="admin" onclick="switchPanel('admin')" title="Admin Panel" aria-label="Admin Panel">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    <span class="nav-label">Admin</span>
-  </button>
-
-  <div class="nav-spacer"></div>
-
-  <!-- Command palette trigger -->
-  <button class="nav-item" onclick="CommandPalette.open()" title="Command Palette (⌘K)" aria-label="Open Command Palette">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
-    <span class="nav-label">Command ⌘K</span>
-  </button>
-
-  <!-- Logout -->
-  <button class="nav-item" onclick="logout()" title="Sign Out" aria-label="Sign Out" style="margin-top:4px">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-    <span class="nav-label">Sign Out</span>
-  </button>
-
-</nav>
-
-<!-- ════════════════════════════════════════════════════════
-     TOP BAR
-     ════════════════════════════════════════════════════════ -->
-<header class="topbar" id="topbar">
-  <img src="{{ url_for('static', filename='logo.png') }}" alt="DOCUVault" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(37,99,235,0.3))">
-  <div>
-    <div id="topbar-eyebrow">Document Intelligence</div>
-    <div class="topbar-title" id="topbar-title">Verify Document</div>
+  <div class="topbar-right">
+    <div id="nav-role-badge" class="role-chip role-verifier">Verifier</div>
+    <div class="user-avatar" id="user-avatar" title="Profile">VR</div>
+    <form method="POST" action="/logout" style="margin:0">
+      <button type="submit" class="btn-logout">⏻ EXIT</button>
+    </form>
   </div>
-
-  <div class="topbar-spacer"></div>
-
-  <!-- System status -->
-  <div class="chain-badge">
-    <div class="chain-badge-dot"></div>
-    Blockchain Online
-  </div>
-
-  <!-- Role badge -->
-  <span class="badge badge-neutral" id="nav-role-badge" style="text-transform:capitalize">—</span>
-
-  <!-- User display -->
-  <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface-muted);border:1px solid var(--border);border-radius:var(--radius-full);font-size:13px;font-weight:600;color:var(--text-primary)">
-    <div style="width:26px;height:26px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff" id="user-avatar">?</div>
-    <span id="user-role-display">—</span>
-  </div>
-
-  <!-- Command palette hint -->
-  <button onclick="CommandPalette.open()" class="btn btn-ghost btn-sm" style="gap:5px;font-size:12px;color:var(--text-muted)">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
-    <kbd>⌘K</kbd>
-  </button>
 </header>
 
-<!-- ════════════════════════════════════════════════════════
-     MAIN CONTENT
-     ════════════════════════════════════════════════════════ -->
-<main class="main-content-wrap" id="main-content">
+<!-- ── Side Nav ── -->
+<nav class="nav-ribbon" id="nav-ribbon">
+  <a class="nav-item active" data-panel="overview" onclick="showPanel('overview',this)" title="Overview">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <span class="nav-label">Overview</span>
+  </a>
 
-  <!-- ── Tab Bar (panel switcher) ─────────────────────── -->
-  <div class="tabs" id="tab-bar" style="margin-bottom:28px">
-    <button class="tab" data-tab="verify" onclick="switchPanel('verify')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-      Verify
-    </button>
-    <button class="tab" data-tab="upload" onclick="switchPanel('upload')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-      Upload
-    </button>
-    <button class="tab" data-tab="admin" onclick="switchPanel('admin')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      Admin
-    </button>
-  </div>
+  <a class="nav-item institution-only" data-panel="upload" onclick="showPanel('upload',this)" title="Upload">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <span class="nav-label">Upload Doc</span>
+  </a>
 
-  <!-- ══════════════════════════════════════════════════
-       PANEL: VERIFY
-       ══════════════════════════════════════════════════ -->
-  <div class="panel active" id="panel-verify">
+  <a class="nav-item" data-panel="verify" onclick="showPanel('verify',this)" title="Verify">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+    <span class="nav-label">Verify Doc</span>
+  </a>
 
-    <div class="page-header">
-      <div class="page-header-eyebrow">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
-        Document Intelligence
-      </div>
-      <h2>Verify a Document</h2>
-      <p>Confirm authenticity and integrity using blockchain ledger or AI anomaly detection.</p>
-    </div>
+  <a class="nav-item institution-only" data-panel="records" onclick="showPanel('records',this)" title="Records">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    <span class="nav-label">Records</span>
+  </a>
 
-    <!-- Verify Mode Selector -->
-    <div class="verify-mode-cards">
+  <div style="flex:1"></div>
 
-      <div class="verify-mode-card selected" data-mode="digital">
-        <div class="verify-mode-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        </div>
-        <div>
-          <div class="verify-mode-label">Blockchain</div>
-          <div class="verify-mode-desc">Hash lookup on-chain</div>
-        </div>
-      </div>
+  <a class="nav-item" onclick="window.location.href='/logout'" title="Logout" style="color:#F87171">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    <span class="nav-label" style="color:#F87171">Logout</span>
+  </a>
+</nav>
 
-      <div class="verify-mode-card" data-mode="legacy">
-        <div class="verify-mode-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
-        </div>
-        <div>
-          <div class="verify-mode-label">Legacy AI</div>
-          <div class="verify-mode-desc">ML anomaly check</div>
-        </div>
-      </div>
+<!-- ── Main Dashboard ── -->
+<main class="dash-wrap" id="main-content">
 
-      <div class="verify-mode-card" data-mode="manual">
-        <div class="verify-mode-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </div>
-        <div>
-          <div class="verify-mode-label">Manual Entry</div>
-          <div class="verify-mode-desc">Type data directly</div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- ── Digital Verify Form ─────────────────────────── -->
-    <div id="digital-form" class="verify-form-block visible">
-      <div class="card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          <div>
-            <div style="font-size:14px;font-weight:700;color:var(--text-primary)">Blockchain Verification</div>
-            <div style="font-size:12px;color:var(--text-muted)">Document hash is checked against the immutable ledger</div>
-          </div>
-          <div class="chain-badge" style="margin-left:auto">
-            <div class="chain-badge-dot"></div>
-            Ledger Active
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="upload-zone" id="verify-zone">
-            <input type="file" id="verify-file-input" multiple accept=".pdf,.jpg,.jpeg,.png">
-            <div class="upload-icon-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-            </div>
-            <div class="upload-title">Drop document here</div>
-            <div class="upload-subtitle">PDF, JPG, PNG · Maximum 16 MB</div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation()">Choose File</button>
-            <ul class="upload-file-list" id="verify-file-list"></ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Legacy AI Form ──────────────────────────────── -->
-    <div id="legacy-form" class="verify-form-block">
-      <div class="card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
-          <div>
-            <div style="font-size:14px;font-weight:700;color:var(--text-primary)">Legacy Document (AI Check)</div>
-            <div style="font-size:12px;color:var(--text-muted)">Uses OCR + IsolationForest + ELA tamper analysis</div>
-          </div>
-          <span class="badge badge-pending" style="margin-left:auto">AI Model</span>
-        </div>
-        <div class="card-body">
-          <div class="info-banner">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Legacy documents are analyzed using Error Level Analysis and ML anomaly scoring. Results may take a few seconds.
-          </div>
-          <div class="upload-zone" id="legacy-zone">
-            <input type="file" id="legacy-file-input" multiple accept=".pdf,.jpg,.jpeg,.png">
-            <div class="upload-icon-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
-            </div>
-            <div class="upload-title">Drop legacy document here</div>
-            <div class="upload-subtitle">Scanned physical certificates · PDF or Image</div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation()">Choose File</button>
-            <ul class="upload-file-list" id="legacy-file-list"></ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Manual Entry Form ───────────────────────────── -->
-    <div id="manual-form" class="verify-form-block">
-      <div class="card">
-        <div class="card-header">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          <div>
-            <div style="font-size:14px;font-weight:700;color:var(--text-primary)">Manual Data Entry</div>
-            <div style="font-size:12px;color:var(--text-muted)">Enter certificate details for validation</div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="manual-grid">
-            <div class="form-group">
-              <label class="form-label" for="manual-name">Full Name</label>
-              <input type="text" id="manual-name" class="form-input" placeholder="Student full name">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="manual-roll">Roll Number</label>
-              <input type="text" id="manual-roll" class="form-input" placeholder="e.g. 2021XXXX">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="manual-grade">Grade / Division</label>
-              <input type="text" id="manual-grade" class="form-input" placeholder="e.g. A1">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="manual-id">Document ID</label>
-              <input type="text" id="manual-id" class="form-input" placeholder="Unique document ID">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="manual-institution">Institution</label>
-              <input type="text" id="manual-institution" class="form-input" placeholder="Issuing institution name">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="manual-uid">UID</label>
-              <input type="text" id="manual-uid" class="form-input" placeholder="Unique identifier (optional)">
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Action Bar -->
-    <div class="action-bar">
-      <button id="verify-btn" class="btn btn-accent btn-lg" onclick="verifyFile()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-        <span class="btn-text">Verify Document</span>
-      </button>
-    <div id="result-container"></div>
-
-  </div>
-
-  <!-- ══════════════════════════════════════════════════
-       PANEL: UPLOAD
-       ══════════════════════════════════════════════════ -->
-  <div class="panel" id="panel-upload">
+  <!-- ══ OVERVIEW PANEL ══ -->
+  <div id="panel-overview" class="panel">
 
     <div class="page-header">
-      <div class="page-header-eyebrow">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
-        Institution Workflow
-      </div>
-      <h2>Upload & Register Document</h2>
-      <p>Documents are OCR-processed, hashed with SHA-256, ZKP-proofed, and anchored to the blockchain.</p>
+      <h2 class="page-title">SYSTEM <span>OVERVIEW</span></h2>
+      <p class="page-subtitle" id="welcome-msg">Welcome back — <span class="typing-cursor"></span></p>
     </div>
 
-    <div class="card-elevated" style="margin-bottom:20px">
-      <div class="card-header">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-        <div>
-          <div style="font-size:14px;font-weight:700">Certificate Upload</div>
-          <div style="font-size:12px;color:var(--text-muted)">Supports PDF, JPG, PNG — up to 16 MB per file</div>
-        </div>
-        <span class="badge badge-info" style="margin-left:auto">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Institution Access
-        </span>
+    <!-- Stats row -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Documents Verified</div>
+        <div class="stat-value cyan" id="stat-verified">—</div>
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">All time</div>
       </div>
-      <div class="card-body">
-
-        <!-- Pipeline steps -->
-        <div style="display:flex;align-items:center;gap:0;margin-bottom:24px;overflow-x:auto;padding-bottom:4px">
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;padding:10px 16px;background:var(--accent-soft);border-radius:var(--radius-md);border:1px solid #BFDBFE">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-            <span style="font-size:12px;font-weight:700;color:var(--accent)">Upload</span>
-          </div>
-          <div style="flex:1;min-width:20px;height:1px;background:var(--border)"></div>
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;padding:10px 16px;background:var(--surface-muted);border-radius:var(--radius-md);border:1px solid var(--border)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span style="font-size:12px;font-weight:600;color:var(--text-muted)">OCR Extract</span>
-          </div>
-          <div style="flex:1;min-width:20px;height:1px;background:var(--border)"></div>
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;padding:10px 16px;background:var(--surface-muted);border-radius:var(--radius-md);border:1px solid var(--border)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span style="font-size:12px;font-weight:600;color:var(--text-muted)">ZKP + Hash</span>
-          </div>
-          <div style="flex:1;min-width:20px;height:1px;background:var(--border)"></div>
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;padding:10px 16px;background:var(--surface-muted);border-radius:var(--radius-md);border:1px solid var(--border)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <span style="font-size:12px;font-weight:600;color:var(--text-muted)">Blockchain</span>
-          </div>
-        </div>
-
-        <!-- Drop zone -->
-        <div class="upload-zone" id="upload-zone">
-          <input type="file" id="upload-file-input" multiple accept=".pdf,.jpg,.jpeg,.png">
-          <div class="upload-icon-wrap">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-          </div>
-          <div class="upload-title">Drag &amp; drop your documents</div>
-          <div class="upload-subtitle">PDF · JPG · PNG — Max 16 MB each</div>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation()">Browse Files</button>
-          <ul class="upload-file-list" id="upload-file-list"></ul>
-        </div>
-
+      <div class="stat-card">
+        <div class="stat-label">Blockchain Nodes</div>
+        <div class="stat-value green">12</div>
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00FF88" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76l-1.41 1.41M7.76 16.24l-1.41 1.41M20 12h-2M6 12H4M16.24 16.24l-1.41-1.41M7.76 7.76L6.35 6.35"/></svg></div>
+        <div style="font-size:11px;color:var(--green);font-family:var(--font-mono);margin-top:4px">All online</div>
+      </div>
+      <div class="stat-card institution-only">
+        <div class="stat-label">Docs Uploaded</div>
+        <div class="stat-value" id="stat-uploads" style="color:#F59E0B">—</div>
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">By your org</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Network Hash</div>
+        <div class="stat-value" style="font-size:14px;color:var(--text-secondary);font-family:var(--font-mono);margin-top:8px" id="stat-hash">—</div>
+        <div class="stat-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+        <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">Latest block</div>
       </div>
     </div>
 
-    <!-- Action Bar -->
-    <div class="action-bar">
-      <button id="upload-btn" class="btn btn-primary btn-lg" onclick="uploadFile()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-        <span class="btn-text">Upload &amp; Register</span>
-      </button>
-      <button class="btn btn-ghost btn-lg" onclick="document.getElementById('upload-file-input').value='';document.getElementById('upload-file-list').innerHTML='';document.getElementById('result-container-upload').innerHTML=''">
-        Clear
-      </button>
+    <!-- Panel grid -->
+    <div class="panel-grid">
+
+      <!-- Quick Verify -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div class="panel-title">Quick Verify</div>
+          <div style="margin-left:auto"><div class="chain-badge" style="font-size:9px"><div class="chain-dot"></div>Live</div></div>
+        </div>
+        <div class="panel-body">
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Instantly verify any document against the blockchain ledger.</p>
+          <button class="btn-action btn-cyan" style="width:100%" onclick="showPanel('verify',document.querySelector('[data-panel=verify]'))">
+            ⟶ Open Verifier
+          </button>
+        </div>
+      </div>
+
+      <!-- Network status -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-icon" style="background:var(--green-dim);border-color:rgba(0,255,136,0.3);color:var(--green)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0"/></svg>
+          </div>
+          <div class="panel-title">Network Status</div>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:10px">
+          {% for label, val, color in [
+            ('Blockchain RPC', 'CONNECTED', 'green'),
+            ('AI Model API', 'ONLINE', 'green'),
+            ('IPFS Gateway', 'ACTIVE', 'green'),
+            ('PQC Encryptor', 'READY', 'cyan')
+          ] %}
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:var(--r-sm);border:1px solid var(--border)">
+            <span style="font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">{{ label }}</span>
+            <span style="font-size:10px;font-family:var(--font-mono);font-weight:600;color:var(--{{ color }});background:rgba({% if color=='green' %}0,255,136{% else %}0,212,255{% endif %},.08);padding:2px 8px;border-radius:8px">{{ val }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
-
-    <!-- Results -->
-    <div id="result-container"></div>
-
   </div>
 
-  <!-- ══════════════════════════════════════════════════
-       PANEL: ADMIN
-       ══════════════════════════════════════════════════ -->
-  <div class="panel" id="panel-admin">
-
+  <!-- ══ UPLOAD PANEL ══ -->
+  <div id="panel-upload" class="panel" style="display:none">
     <div class="page-header">
-      <div class="page-header-eyebrow">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
-        System Administration
-      </div>
-      <h2>Admin Panel</h2>
-      <p>Manage users, recover 2FA credentials, and add legacy records.</p>
+      <h2 class="page-title">UPLOAD <span>DOCUMENT</span></h2>
+      <p class="page-subtitle" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">Register a document on the blockchain · SHA-256 + PQC hashed</p>
     </div>
 
-    <!-- Admin Actions Grid -->
-    <div class="admin-grid">
+    <div style="max-width:600px">
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <div class="panel-title">Document Upload</div>
+        </div>
+        <div class="panel-body">
+          <form method="POST" action="/upload" enctype="multipart/form-data" id="upload-form">
 
-      <button class="admin-action-card" onclick="getUsers()">
-        <div class="admin-action-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <div class="admin-action-title">List Users</div>
-        <div class="admin-action-desc">View all registered accounts and roles</div>
-      </button>
+            <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-inp').click()">
+              <div class="upload-icon" id="upload-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <div class="upload-title" id="upload-title">Drop file here or click to browse</div>
+              <div class="upload-sub">PDF, PNG, JPG, DOCX — Max 16MB</div>
+              <input type="file" id="file-inp" name="file" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.docx">
+            </div>
 
-      <button class="admin-action-card" onclick="recover2FA()">
-        <div class="admin-action-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            <div style="display:flex;flex-direction:column;gap:14px;margin-top:20px">
+              <div>
+                <label class="form-label">Holder Name</label>
+                <div class="form-input-wrap">
+                  <input type="text" name="holder_name" class="form-input" placeholder="Full name of document holder" required>
+                  <svg class="form-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+              </div>
+              <div>
+                <label class="form-label">Document Type</label>
+                <div class="form-input-wrap">
+                  <select name="doc_type" class="form-input" style="padding-left:16px" required>
+                    <option value="">Select type…</option>
+                    <option>Degree Certificate</option>
+                    <option>Mark Sheet</option>
+                    <option>Transcript</option>
+                    <option>ID Document</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="form-label">Issue Date</label>
+                <div class="form-input-wrap">
+                  <input type="date" name="issue_date" class="form-input" style="padding-left:16px" required>
+                </div>
+              </div>
+              <div id="upload-error" class="flash-msg flash-error" style="display:none"></div>
+              <button type="submit" class="btn-primary" id="upload-btn">
+                <span id="upload-btn-text">⟶ REGISTER ON BLOCKCHAIN</span>
+              </button>
+            </div>
+          </form>
         </div>
-        <div class="admin-action-title">Recover 2FA</div>
-        <div class="admin-action-desc">Generate new TOTP secret for a user</div>
-      </button>
-
-      <button class="admin-action-card" onclick="addLegacyRecord()">
-        <div class="admin-action-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-        </div>
-        <div class="admin-action-title">Add Legacy Record</div>
-        <div class="admin-action-desc">Manually register a legacy certificate</div>
-      </button>
-
-      <button class="admin-action-card" onclick="CommandPalette.open()">
-        <div class="admin-action-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
-        </div>
-        <div class="admin-action-title">Command Palette</div>
-        <div class="admin-action-desc">Quick access to all actions · ⌘K</div>
-      </button>
-
-    </div>
-
-    <!-- System Info Row -->
-    <div class="stat-grid" style="margin-bottom:24px">
-      <div class="stat-card">
-        <div class="stat-icon navy">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        </div>
-        <div class="stat-value">On</div>
-        <div class="stat-label">Blockchain Status</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon green">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <div class="stat-value">PQC</div>
-        <div class="stat-label">Encryption Mode</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon blue">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-        </div>
-        <div class="stat-value">ZKP</div>
-        <div class="stat-label">Proof System</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon amber">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </div>
-        <div class="stat-value">ML</div>
-        <div class="stat-label">AI Detection</div>
       </div>
     </div>
+  </div>
 
-    <!-- Admin Result Area -->
-    <div id="admin-result"></div>
+  <!-- ══ VERIFY PANEL ══ -->
+  <div id="panel-verify" class="panel" style="display:none">
+    <div class="page-header">
+      <h2 class="page-title">VERIFY <span>DOCUMENT</span></h2>
+      <p class="page-subtitle" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">Cross-reference against the immutable blockchain ledger</p>
+    </div>
 
+    <div style="max-width:600px">
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-icon" style="background:rgba(0,255,136,0.1);border-color:rgba(0,255,136,0.3);color:var(--green)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="panel-title">Verification Engine</div>
+          <div style="margin-left:auto"><div class="chain-badge" style="font-size:9px"><div class="chain-dot"></div>AI Enhanced</div></div>
+        </div>
+        <div class="panel-body">
+
+          <!-- Verify by ID -->
+          <div id="verify-step-1">
+            <div style="display:flex;gap:10px;margin-bottom:20px">
+              <button class="btn-action btn-cyan" id="tab-id" onclick="switchVerifyTab('id')" style="flex:1">By Doc ID</button>
+              <button class="btn-action" id="tab-file" onclick="switchVerifyTab('file')" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)">By File Upload</button>
+            </div>
+
+            <!-- By ID form -->
+            <div id="verify-id-form">
+              <form onsubmit="verifyById(event)">
+                <label class="form-label">Document Hash / ID</label>
+                <div class="form-input-wrap" style="margin-bottom:16px">
+                  <input id="verify-id-inp" type="text" class="form-input" placeholder="0x1a2b3c... or doc ID" style="font-family:var(--font-mono)">
+                  <svg class="form-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <button type="submit" class="btn-primary">⟶ VERIFY ON CHAIN</button>
+              </form>
+            </div>
+
+            <!-- By file form -->
+            <div id="verify-file-form" style="display:none">
+              <form method="POST" action="/verify_document" enctype="multipart/form-data" id="verify-file-form-el">
+                <div class="upload-zone" onclick="document.getElementById('verify-file-inp').click()" style="padding:24px">
+                  <div class="upload-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/></svg></div>
+                  <div class="upload-title" id="vf-title" style="font-size:13px">Drop file to verify</div>
+                  <input type="file" id="verify-file-inp" name="file" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.docx">
+                </div>
+                <button type="submit" class="btn-primary" style="margin-top:16px">⟶ VERIFY FILE</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Verify result -->
+          <div id="verify-result" style="display:none;margin-top:20px"></div>
+
+          {% if verify_result is defined %}
+          <div class="verify-result {{ 'verify-success' if verify_result.verified else 'verify-fail' }}" style="margin-top:20px;text-align:center">
+            <div class="result-icon {{ 'ok' if verify_result.verified else 'fail' }}">
+              {% if verify_result.verified %}✓{% else %}✗{% endif %}
+            </div>
+            <div style="font-family:var(--font-display);font-size:16px;font-weight:700;margin-bottom:8px;color:{% if verify_result.verified %}var(--green){% else %}#F87171{% endif %}">
+              {{ 'VERIFIED' if verify_result.verified else 'NOT VERIFIED' }}
+            </div>
+            {% if verify_result.data %}
+            <div style="text-align:left;margin-top:16px;display:flex;flex-direction:column;gap:6px">
+              {% for key, val in verify_result.data.items() %}
+              <div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px;font-family:var(--font-mono);font-size:11px">
+                <span style="color:var(--text-muted)">{{ key }}</span>
+                <span style="color:var(--text-primary)">{{ val }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ RECORDS PANEL ══ -->
+  <div id="panel-records" class="panel" style="display:none">
+    <div class="page-header">
+      <h2 class="page-title">DOCUMENT <span>RECORDS</span></h2>
+      <p class="page-subtitle" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">Immutable blockchain ledger · Read-only</p>
+    </div>
+
+    <div class="panel-card" style="max-width:900px">
+      <div class="panel-header">
+        <div class="panel-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="panel-title">Ledger Entries</div>
+        <button onclick="loadRecords()" style="margin-left:auto;font-size:11px;color:var(--cyan);background:none;border:none;cursor:pointer;font-family:var(--font-mono)">↻ Refresh</button>
+      </div>
+      <div class="panel-body" style="padding:0">
+        <div id="records-table" style="overflow-x:auto">
+          <div style="padding:40px;text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">
+            Loading records<span class="typing-cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </main>
 
-<!-- ════════════════════════════════════════════════════════
-     COMMAND PALETTE
-     ════════════════════════════════════════════════════════ -->
-<div id="cmd-overlay" class="cmd-overlay" role="dialog" aria-modal="true" aria-label="Command Palette">
-  <div class="cmd-palette">
-    <div class="cmd-input-wrap">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="cmd-input" type="text" placeholder="Search commands…" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="cmd-items"></div>
-    <div class="cmd-footer">
-      <div class="cmd-hint"><kbd>↑↓</kbd> Navigate</div>
-      <div class="cmd-hint"><kbd>↵</kbd> Select</div>
-      <div class="cmd-hint"><kbd>Esc</kbd> Close</div>
-    </div>
-  </div>
-</div>
-
-<!-- Toast container -->
-<div id="toast-container"></div>
-
-<!-- Flash messages from Flask -->
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        Toast.init();
-        {% for category, message in messages %}
-          Toast.{{ 'success' if category == 'success' else 'error' if category == 'error' else 'warning' if category == 'warning' else 'info' }}({{ message | tojson }});
-        {% endfor %}
-      });
-    </script>
-  {% endif %}
-{% endwith %}
-
-<script>
-  // Sync user avatar initials from role
-  document.addEventListener('DOMContentLoaded', () => {
-    // Script.js handles initializeDashboard via window.onload
-    // Override avatar after role loads
-    const orig = window.initializeDashboard || (() => {});
-  });
-
-  // Update avatar once role is set
-  const _origFetch = window.fetch;
-  // Avatar update hook
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-      const roleEl = document.getElementById('nav-role-badge');
-      const avatar = document.getElementById('user-avatar');
-      if (roleEl && avatar) {
-        const roleMap = { admin: 'AD', institution: 'IN', verifier: 'VR' };
-        const role = roleEl.textContent.trim().toLowerCase();
-        avatar.textContent = roleMap[role] || '?';
-      }
-    }, 600);
-  });
-</script>
-
-<!-- ══════════════════════════════════════════════════════════════
+<!-- ═══════════════════════════════════════════════════════════
      ADMIN PANEL MODAL
-════════════════════════════════════════════════════════════════ -->
-<div id="admin-panel-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);z-index:2000;overflow-y:auto">
+═══════════════════════════════════════════════════════════════ -->
+<div id="admin-panel-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(16px);z-index:2000;overflow-y:auto">
   <div style="min-height:100%;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px">
-    <div style="background:var(--surface);border-radius:20px;border:1px solid var(--border);width:100%;max-width:560px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.3)">
+    <div style="background:rgba(13,17,23,0.97);border:1px solid rgba(0,212,255,0.2);border-radius:24px;width:100%;max-width:560px;overflow:hidden;box-shadow:0 0 80px rgba(0,212,255,0.1),0 32px 80px rgba(0,0,0,0.6)">
 
-      <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);padding:28px 32px;display:flex;justify-content:space-between;align-items:center">
+      <!-- Modal header -->
+      <div style="background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(0,255,136,0.05));padding:28px 32px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:4px">Admin Portal</div>
-          <h2 style="color:#fff;font-size:20px;margin:0">Account Management</h2>
+          <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--cyan);font-family:var(--font-mono);margin-bottom:4px">Admin Portal</div>
+          <h2 style="color:var(--text-primary);font-size:18px;font-family:var(--font-display);letter-spacing:0.06em">ACCOUNT MANAGEMENT</h2>
         </div>
-        <button onclick="closeAdminPanel()" style="background:rgba(255,255,255,0.12);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">&times;</button>
+        <button onclick="closeAdminPanel()" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;color:var(--text-muted);font-size:18px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">&times;</button>
       </div>
 
       <div style="padding:32px">
 
-        <!-- Step 1: Create Account Form -->
+        <!-- Step 1: Create form -->
         <div id="admin-step-1">
-          <h3 style="font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Create New Account</h3>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">The person will scan a QR code to set up 2FA before the account is activated.</p>
+          <h3 style="font-size:13px;font-weight:600;color:var(--text-primary);font-family:var(--font-display);letter-spacing:0.06em;margin-bottom:4px;text-transform:uppercase">Create New Account</h3>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;font-family:var(--font-mono)">Person scans QR code to set up 2FA before account activates</p>
           <div style="display:flex;flex-direction:column;gap:14px">
             <div>
-              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">USERNAME</label>
-              <input id="new-username" type="text" placeholder="e.g. iit_bombay" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:14px;background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box">
+              <label class="form-label">Username</label>
+              <div class="form-input-wrap">
+                <input id="new-username" type="text" class="form-input" placeholder="e.g. iit_bombay">
+                <svg class="form-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
             </div>
             <div>
-              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">PASSWORD</label>
-              <input id="new-password" type="password" placeholder="Min. 8 characters" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:14px;background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box">
+              <label class="form-label">Password</label>
+              <div class="form-input-wrap">
+                <input id="new-password" type="password" class="form-input" placeholder="Min. 8 characters">
+                <svg class="form-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
             </div>
             <div>
-              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">ROLE</label>
-              <select id="new-role" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:14px;background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box">
+              <label class="form-label">Role</label>
+              <select id="new-role" class="form-input" style="padding-left:16px">
                 <option value="institution">Institution</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
-            <div id="create-err" style="display:none;padding:10px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius-md);color:#DC2626;font-size:13px"></div>
-            <button id="create-btn" onclick="adminInitAccount()" style="padding:12px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">
-              Generate 2FA Setup &rarr;
+            <div id="create-err" class="flash-msg flash-error" style="display:none"></div>
+            <button id="create-btn" onclick="adminInitAccount()" class="btn-primary">
+              ⟶ GENERATE 2FA SETUP
             </button>
           </div>
         </div>
 
-        <!-- Step 2: QR Code + OTP -->
+        <!-- Step 2: QR + OTP -->
         <div id="admin-step-2" style="display:none">
           <div style="text-align:center;margin-bottom:20px">
-            <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:6px">Scan QR Code</h3>
-            <p style="font-size:13px;color:var(--text-muted)">Ask <strong id="pending-username-label"></strong> to scan this with Google Authenticator or Authy, then enter the 6-digit code.</p>
+            <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);font-family:var(--font-display);letter-spacing:0.05em;margin-bottom:8px">SCAN QR CODE</h3>
+            <p style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">Ask <strong id="pending-username-label" style="color:var(--cyan)"></strong> to scan with Google Authenticator</p>
           </div>
-          <div style="text-align:center;margin:20px 0">
-            <img id="qr-img" src="" alt="TOTP QR Code" style="width:200px;height:200px;border-radius:12px;border:4px solid var(--border)">
+          <div style="text-align:center;margin:20px 0;position:relative">
+            <div style="display:inline-block;padding:12px;background:rgba(255,255,255,0.97);border-radius:16px;box-shadow:var(--cyan-glow)">
+              <img id="qr-img" src="" alt="TOTP QR" style="width:180px;height:180px;display:block">
+            </div>
           </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:20px;text-align:center">
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Or enter key manually</div>
-            <code id="totp-secret-display" style="font-family:var(--font-mono);font-size:15px;color:var(--text-primary);letter-spacing:0.08em;word-break:break-all"></code>
+          <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border-glow);border-radius:var(--r-md);padding:12px 16px;margin-bottom:20px;text-align:center">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:var(--font-mono)">MANUAL KEY</div>
+            <code id="totp-secret-display" style="font-family:var(--font-mono);font-size:14px;color:var(--cyan);letter-spacing:0.08em;word-break:break-all"></code>
           </div>
-          <div style="margin-bottom:14px">
-            <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">6-DIGIT OTP FROM AUTHENTICATOR</label>
-            <input id="otp-input" type="text" maxlength="6" inputmode="numeric" placeholder="_ _ _ _ _ _"
-              style="width:100%;padding:14px;text-align:center;letter-spacing:0.3em;font-size:22px;font-family:var(--font-mono);border:2px solid var(--border);border-radius:var(--radius-md);background:var(--bg);color:var(--text-primary);outline:none;box-sizing:border-box"
-              oninput="this.value=this.value.replace(/\D/g,'');if(this.value.length===6)adminConfirmAccount()">
+          <label class="form-label" style="text-align:center;display:block;margin-bottom:12px">ENTER 6-DIGIT OTP</label>
+          <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">
+            <input type="text" maxlength="6" inputmode="numeric" id="otp-input"
+              style="width:180px;padding:14px;text-align:center;letter-spacing:0.3em;font-size:22px;font-family:var(--font-mono);border:1.5px solid var(--border);border-radius:var(--r-md);background:var(--bg-card);color:var(--cyan);outline:none;transition:all 0.2s"
+              oninput="this.value=this.value.replace(/\D/g,'');if(this.value.length===6)adminConfirmAccount()"
+              onfocus="this.style.borderColor='var(--cyan)';this.style.boxShadow='var(--cyan-glow)'"
+              onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
           </div>
-          <div id="otp-err" style="display:none;padding:10px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius-md);color:#DC2626;font-size:13px;margin-bottom:14px"></div>
+          <div id="otp-err" class="flash-msg flash-error" style="display:none;margin-bottom:14px"></div>
           <div style="display:flex;gap:10px">
-            <button onclick="adminRegenerateSecret()" style="flex:1;padding:11px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer">New QR Code</button>
-            <button id="confirm-btn" onclick="adminConfirmAccount()" style="flex:2;padding:11px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">Confirm &amp; Create Account</button>
+            <button onclick="adminRegenerateSecret()" style="flex:1;padding:11px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--r-md);font-size:12px;font-weight:500;color:var(--text-muted);cursor:pointer;font-family:var(--font-mono);transition:all 0.2s" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">↻ New QR</button>
+            <button id="confirm-btn" onclick="adminConfirmAccount()" class="btn-primary" style="flex:2">✓ CONFIRM &amp; CREATE</button>
           </div>
-          <button onclick="showStep1()" style="margin-top:10px;width:100%;padding:9px;background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer">&larr; Back</button>
+          <button onclick="showStep1()" style="margin-top:10px;width:100%;padding:9px;background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;font-family:var(--font-mono)">← Back</button>
         </div>
 
         <!-- Step 3: Success -->
         <div id="admin-step-3" style="display:none;text-align:center;padding:20px 0">
-          <div style="width:72px;height:72px;background:#ECFDF5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <div style="width:72px;height:72px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:var(--green-glow)">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00FF88" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <h3 style="font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Account Created!</h3>
-          <p id="success-msg" style="font-size:14px;color:var(--text-muted);margin-bottom:24px"></p>
-          <button onclick="showStep1()" style="padding:11px 24px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">Create Another</button>
+          <h3 style="font-size:18px;font-weight:700;color:var(--green);margin-bottom:8px;font-family:var(--font-display);letter-spacing:0.05em">ACCOUNT CREATED</h3>
+          <p id="success-msg" style="font-size:13px;color:var(--text-muted);margin-bottom:24px;font-family:var(--font-mono)"></p>
+          <button onclick="showStep1()" class="btn-action btn-green" style="padding:12px 28px">Create Another</button>
         </div>
 
         <!-- User List -->
         <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h3 style="font-size:14px;font-weight:600;color:var(--text-primary)">Existing Accounts</h3>
-            <button onclick="loadUserList()" style="font-size:12px;color:#2563EB;background:none;border:none;cursor:pointer;font-weight:500">Refresh</button>
+            <h3 style="font-size:12px;font-weight:600;color:var(--text-primary);font-family:var(--font-display);letter-spacing:0.08em;text-transform:uppercase">System Accounts</h3>
+            <button onclick="loadUserList()" style="font-size:11px;color:var(--cyan);background:none;border:none;cursor:pointer;font-family:var(--font-mono)">↻ Refresh</button>
           </div>
-          <div id="user-list" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto">
-            <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:20px">Loading&hellip;</div>
+          <div id="user-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto">
+            <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:20px;font-family:var(--font-mono)">Loading…</div>
           </div>
         </div>
-
       </div>
     </div>
   </div>
 </div>
 
-<!-- Admin FAB Button -->
-<button id="admin-panel-btn" onclick="openAdminPanel()" style="display:none;position:fixed;bottom:28px;right:28px;z-index:1000;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:14px;padding:13px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 20px rgba(37,99,235,0.45);align-items:center;gap:8px;transition:transform 0.2s,box-shadow 0.2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+<!-- Admin FAB -->
+<button id="admin-panel-btn" onclick="openAdminPanel()" style="display:none;position:fixed;bottom:28px;right:28px;z-index:1000;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(0,255,136,0.1));color:var(--cyan);border:1px solid var(--border-glow);border-radius:14px;padding:12px 20px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-display);letter-spacing:0.08em;text-transform:uppercase;box-shadow:var(--cyan-glow);align-items:center;gap:8px;transition:all 0.2s" onmouseover="this.style.boxShadow='0 0 40px rgba(0,212,255,0.6)'" onmouseout="this.style.boxShadow='var(--cyan-glow)'">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
   Manage Accounts
 </button>
 
 <script>
-let _pendingId = null;
+// ── Particles ──────────────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('particles');
+  const ctx = canvas.getContext('2d');
+  let W, H, pts = [];
+  function resize() { W = canvas.width=innerWidth; H = canvas.height=innerHeight; }
+  window.addEventListener('resize', resize); resize();
+  for(let i=0;i<50;i++) pts.push({x:Math.random()*9999,y:Math.random()*9999,vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,r:Math.random()*1.2+.3,a:Math.random()});
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    pts.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;
+      ctx.beginPath();ctx.arc(p.x%W,p.y%H,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,212,255,${p.a*.4})`;ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
 
-function openAdminPanel() { document.getElementById('admin-panel-overlay').style.display='block'; loadUserList(); }
-function closeAdminPanel() { document.getElementById('admin-panel-overlay').style.display='none'; }
-function showStep1() {
-  document.getElementById('admin-step-1').style.display='block';
-  document.getElementById('admin-step-2').style.display='none';
-  document.getElementById('admin-step-3').style.display='none';
-  document.getElementById('create-err').style.display='none';
-  document.getElementById('new-username').value='';
-  document.getElementById('new-password').value='';
-  _pendingId=null;
+// ── Panel switching ────────────────────────────────────────────
+function showPanel(id, el) {
+  document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const panel = document.getElementById('panel-'+id);
+  if(panel) { panel.style.display='block'; panel.style.animation='fadeUp 0.4s cubic-bezier(0.16,1,0.3,1) both'; }
+  if(el) el.classList.add('active');
+  if(id==='records') loadRecords();
 }
 
-async function adminInitAccount() {
-  const btn=document.getElementById('create-btn'), errEl=document.getElementById('create-err');
-  errEl.style.display='none'; btn.textContent='Generating…'; btn.disabled=true;
+// ── Role-based UI ──────────────────────────────────────────────
+async function initDashboard() {
   try {
+    const res = await fetch('/get_role');
+    const data = await res.json();
+    const role = data.role || 'verifier';
+    const username = data.username || '';
+
+    // Welcome message
+    const wm = document.getElementById('welcome-msg');
+    if(wm) wm.innerHTML = `Welcome back, <span style="color:var(--cyan);font-family:var(--font-mono)">${username}</span><span class="typing-cursor"></span>`;
+
+    // Role badge
+    const badge = document.getElementById('nav-role-badge');
+    if(badge) {
+      badge.textContent = role.charAt(0).toUpperCase()+role.slice(1);
+      badge.className = 'role-chip role-'+role;
+    }
+
+    // Avatar
+    const av = document.getElementById('user-avatar');
+    if(av) {
+      if(data.google_avatar) {
+        av.innerHTML = `<img src="${data.google_avatar}" style="width:100%;height:100%;border-radius:8px;object-fit:cover">`;
+      } else {
+        const map={admin:'AD',institution:'IN',verifier:'VR'};
+        av.textContent = map[role]||'??';
+      }
+    }
+
+    // Show/hide institution-only elements
+    document.querySelectorAll('.institution-only').forEach(el=>{
+      el.style.display = (role==='institution'||role==='admin') ? '' : 'none';
+    });
+
+    // Admin button
+    if(role==='admin') {
+      const btn=document.getElementById('admin-panel-btn');
+      if(btn) btn.style.display='flex';
+    }
+
+    // Stats
+    loadStats(role);
+
+    // Hash animation
+    animateHash();
+
+  } catch(e) { console.error(e); }
+}
+
+function loadStats(role) {
+  // Simulate loading numbers with animation
+  animateCount(document.getElementById('stat-verified'), 0, Math.floor(Math.random()*800+200), 1500);
+  if(role==='institution'||role==='admin') {
+    animateCount(document.getElementById('stat-uploads'), 0, Math.floor(Math.random()*120+20), 1200);
+  }
+}
+
+function animateCount(el, from, to, duration) {
+  if(!el) return;
+  const start = performance.now();
+  function update(now) {
+    const t = Math.min((now-start)/duration, 1);
+    const ease = 1-Math.pow(1-t, 3);
+    el.textContent = Math.floor(from + (to-from)*ease).toLocaleString();
+    if(t<1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+function animateHash() {
+  const el = document.getElementById('stat-hash');
+  if(!el) return;
+  const chars='0123456789abcdef';
+  let hash = '0x'+Array.from({length:16},()=>chars[Math.floor(Math.random()*16)]).join('');
+  el.textContent = hash;
+  setInterval(()=>{
+    hash = '0x'+Array.from({length:16},()=>chars[Math.floor(Math.random()*16)]).join('');
+    el.textContent = hash;
+  }, 3000);
+}
+
+// ── Verify tabs ────────────────────────────────────────────────
+function switchVerifyTab(tab) {
+  document.getElementById('verify-id-form').style.display   = tab==='id' ? 'block' : 'none';
+  document.getElementById('verify-file-form').style.display = tab==='file' ? 'block' : 'none';
+  const idBtn=document.getElementById('tab-id'), fileBtn=document.getElementById('tab-file');
+  if(tab==='id') { idBtn.className='btn-action btn-cyan'; fileBtn.style.cssText='flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:10px 20px;border-radius:var(--r-md);font-size:12px;font-family:var(--font-mono);cursor:pointer'; }
+  else { fileBtn.className='btn-action btn-cyan'; idBtn.style.cssText='flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:10px 20px;border-radius:var(--r-md);font-size:12px;font-family:var(--font-mono);cursor:pointer'; }
+}
+
+async function verifyById(e) {
+  e.preventDefault();
+  const id = document.getElementById('verify-id-inp').value.trim();
+  const resultEl = document.getElementById('verify-result');
+  if(!id) return;
+  resultEl.style.display='block';
+  resultEl.innerHTML='<div style="text-align:center;padding:24px;font-family:var(--font-mono);font-size:12px;color:var(--cyan)">▶ Querying blockchain<span class="typing-cursor"></span></div>';
+  try {
+    const res = await fetch(`/check_certificate?certificate_id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+    if(data.verified) {
+      resultEl.innerHTML=`<div class="verify-result verify-success" style="text-align:center"><div class="result-icon ok">✓</div><div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--green);letter-spacing:0.08em">DOCUMENT VERIFIED</div><div style="margin-top:12px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">${data.holder||''} · ${data.doc_type||''}</div></div>`;
+    } else {
+      resultEl.innerHTML=`<div class="verify-result verify-fail" style="text-align:center"><div class="result-icon fail">✗</div><div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:#F87171;letter-spacing:0.08em">NOT FOUND</div><div style="margin-top:8px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">No record on blockchain</div></div>`;
+    }
+  } catch(err) {
+    resultEl.innerHTML='<div class="flash-msg flash-error">Network error. Try again.</div>';
+  }
+}
+
+// ── Records ────────────────────────────────────────────────────
+async function loadRecords() {
+  const el = document.getElementById('records-table');
+  el.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px">Loading<span class="typing-cursor"></span></div>';
+  try {
+    const res = await fetch('/get_certificates');
+    const data = await res.json();
+    if(!data.length) { el.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px">No records found</div>'; return; }
+    el.innerHTML=`<table style="width:100%;border-collapse:collapse">
+      <thead><tr>${['ID','Holder','Type','Issued','Hash'].map(h=>`<th style="padding:12px 16px;text-align:left;font-size:10px;font-family:var(--font-mono);color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+      <tbody>${data.map((r,i)=>`<tr style="border-bottom:1px solid rgba(255,255,255,0.03);animation:fadeUp 0.3s both;animation-delay:${i*0.04}s" onmouseover="this.style.background='rgba(0,212,255,0.03)'" onmouseout="this.style.background=''">${[
+        `<td style="padding:12px 16px;font-size:11px;font-family:var(--font-mono);color:var(--cyan)">${r.id||'—'}</td>`,
+        `<td style="padding:12px 16px;font-size:13px;color:var(--text-primary)">${r.holder_name||'—'}</td>`,
+        `<td style="padding:12px 16px;font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">${r.doc_type||'—'}</td>`,
+        `<td style="padding:12px 16px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${r.issue_date||'—'}</td>`,
+        `<td style="padding:12px 16px;font-size:10px;font-family:var(--font-mono);color:var(--text-muted)">${(r.hash||'').slice(0,16)}…</td>`
+      ].join('')}</tr>`).join('')}</tbody></table>`;
+  } catch(e) { el.innerHTML='<div class="flash-msg flash-error" style="margin:16px">Failed to load records</div>'; }
+}
+
+// ── Upload drag-drop ───────────────────────────────────────────
+const fileInp = document.getElementById('file-inp');
+const dropZone = document.getElementById('drop-zone');
+if(fileInp) {
+  fileInp.addEventListener('change', e=>{
+    const f=e.target.files[0];
+    if(f) document.getElementById('upload-title').textContent='📄 '+f.name;
+  });
+}
+if(dropZone) {
+  ['dragover','dragenter'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();dropZone.classList.add('dragover');}));
+  ['dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,()=>dropZone.classList.remove('dragover')));
+  dropZone.addEventListener('drop',e=>{
+    e.preventDefault();
+    const f=e.dataTransfer.files[0];
+    if(f){ fileInp.files=e.dataTransfer.files; document.getElementById('upload-title').textContent='📄 '+f.name; }
+  });
+}
+const vfInp = document.getElementById('verify-file-inp');
+if(vfInp) vfInp.addEventListener('change',e=>{ const f=e.target.files[0]; if(f) document.getElementById('vf-title').textContent='📄 '+f.name; });
+
+document.getElementById('upload-form')?.addEventListener('submit',()=>{
+  document.getElementById('upload-btn-text').textContent='▶ REGISTERING...';
+});
+
+// ── Admin panel ────────────────────────────────────────────────
+let _pendingId=null;
+function openAdminPanel(){document.getElementById('admin-panel-overlay').style.display='block';loadUserList();}
+function closeAdminPanel(){document.getElementById('admin-panel-overlay').style.display='none';}
+function showStep1(){['admin-step-1','admin-step-2','admin-step-3'].forEach((id,i)=>document.getElementById(id).style.display=i===0?'block':'none');document.getElementById('create-err').style.display='none';document.getElementById('new-username').value='';document.getElementById('new-password').value='';_pendingId=null;}
+
+async function adminInitAccount(){
+  const btn=document.getElementById('create-btn'),errEl=document.getElementById('create-err');
+  errEl.style.display='none';btn.innerHTML='▶ GENERATING…';btn.disabled=true;
+  try{
     const res=await fetch('/admin/init-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('new-username').value.trim(),password:document.getElementById('new-password').value,role:document.getElementById('new-role').value})});
     const data=await res.json();
-    if(!res.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+    if(!res.ok){errEl.textContent=data.error;errEl.style.display='flex';return;}
     _pendingId=data.pending_id;
     document.getElementById('qr-img').src='data:image/png;base64,'+data.qr_code;
     document.getElementById('totp-secret-display').textContent=data.totp_secret;
     document.getElementById('pending-username-label').textContent=document.getElementById('new-username').value.trim();
-    document.getElementById('otp-input').value='';
-    document.getElementById('otp-err').style.display='none';
-    document.getElementById('admin-step-1').style.display='none';
-    document.getElementById('admin-step-2').style.display='block';
-  } catch(e){errEl.textContent='Network error.';errEl.style.display='block';}
-  finally{btn.textContent='Generate 2FA Setup \u2192';btn.disabled=false;}
+    document.getElementById('otp-input').value='';document.getElementById('otp-err').style.display='none';
+    document.getElementById('admin-step-1').style.display='none';document.getElementById('admin-step-2').style.display='block';
+  }catch(e){errEl.textContent='Network error.';errEl.style.display='flex';}
+  finally{btn.innerHTML='⟶ GENERATE 2FA SETUP';btn.disabled=false;}
 }
 
-async function adminConfirmAccount() {
+async function adminConfirmAccount(){
   const btn=document.getElementById('confirm-btn'),errEl=document.getElementById('otp-err');
   const otp=document.getElementById('otp-input').value.trim();
   errEl.style.display='none';
-  if(otp.length!==6){errEl.textContent='Enter the full 6-digit code.';errEl.style.display='block';return;}
-  btn.textContent='Verifying…';btn.disabled=true;
-  try {
+  if(otp.length!==6){errEl.textContent='Enter the full 6-digit code.';errEl.style.display='flex';return;}
+  btn.innerHTML='▶ VERIFYING…';btn.disabled=true;
+  try{
     const res=await fetch('/admin/confirm-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pending_id:_pendingId,otp})});
     const data=await res.json();
-    if(!res.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
-    document.getElementById('success-msg').textContent='"'+data.username+'" ('+data.role+') is ready to log in.';
-    document.getElementById('admin-step-2').style.display='none';
-    document.getElementById('admin-step-3').style.display='block';
+    if(!res.ok){errEl.textContent=data.error;errEl.style.display='flex';return;}
+    document.getElementById('success-msg').textContent=`"${data.username}" (${data.role}) is ready to log in.`;
+    document.getElementById('admin-step-2').style.display='none';document.getElementById('admin-step-3').style.display='block';
     loadUserList();
-  } catch(e){errEl.textContent='Network error.';errEl.style.display='block';}
-  finally{btn.textContent='Confirm \u0026 Create Account';btn.disabled=false;}
+  }catch(e){errEl.textContent='Network error.';errEl.style.display='flex';}
+  finally{btn.innerHTML='✓ CONFIRM &amp; CREATE';btn.disabled=false;}
 }
 
-async function adminRegenerateSecret() {
+async function adminRegenerateSecret(){
   const res=await fetch('/admin/regenerate-secret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pending_id:_pendingId})});
   const data=await res.json();
-  if(res.ok){document.getElementById('qr-img').src='data:image/png;base64,'+data.qr_code;document.getElementById('totp-secret-display').textContent=data.totp_secret;document.getElementById('otp-input').value='';document.getElementById('otp-err').style.display='none';}
+  if(res.ok){document.getElementById('qr-img').src='data:image/png;base64,'+data.qr_code;document.getElementById('totp-secret-display').textContent=data.totp_secret;document.getElementById('otp-input').value='';}
 }
 
-async function loadUserList() {
+async function loadUserList(){
   const el=document.getElementById('user-list');
-  el.innerHTML='<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px">Loading\u2026</div>';
-  try {
+  el.innerHTML='<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px;font-family:var(--font-mono)">Loading…</div>';
+  try{
     const res=await fetch('/admin/users');const users=await res.json();
-    const rc={admin:'#DC2626',institution:'#D97706',verifier:'#2563EB'};
-    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:var(--radius-md);border:1px solid var(--border)"><div style="width:34px;height:34px;border-radius:50%;background:${rc[u.role]||'#6B7280'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${rc[u.role]||'#6B7280'}">${u.role==='admin'?'AD':u.role==='institution'?'IN':'VR'}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:11px;color:var(--text-muted)">${u.provider==='google'?'&#128309; Google':'&#128272; Local'} &middot; <span style="color:${rc[u.role]||'#6B7280'};font-weight:600">${u.role}</span></div></div><button onclick="deleteUser(${u.id},'${u.username}')" style="background:none;border:1px solid #FECACA;border-radius:8px;padding:5px 10px;color:#DC2626;font-size:11px;cursor:pointer">Delete</button></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px">No users found.</div>';
-  } catch(e){el.innerHTML='<div style="color:#DC2626;padding:16px;font-size:13px">Failed to load.</div>';}
+    const rc={admin:'#F87171',institution:'#FCD34D',verifier:'#00D4FF'};
+    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.02);border-radius:var(--r-md);border:1px solid var(--border);transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(0,212,255,0.2)'" onmouseout="this.style.borderColor='var(--border)'"><div style="width:34px;height:34px;border-radius:10px;background:${rc[u.role]||'#6B7280'}18;border:1px solid ${rc[u.role]||'#6B7280'}40;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${rc[u.role]||'#6B7280'};font-family:var(--font-mono)">${u.role==='admin'?'AD':u.role==='institution'?'IN':'VR'}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:10px;color:var(--text-muted)">${u.provider==='google'?'Google OAuth':'Local Auth'} · <span style="color:${rc[u.role]||'#6B7280'};font-weight:600;text-transform:uppercase;letter-spacing:0.05em">${u.role}</span></div></div><button onclick="deleteUser(${u.id},'${u.username}')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:6px;padding:4px 10px;color:#F87171;font-size:10px;cursor:pointer;font-family:var(--font-mono);transition:all 0.2s" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.08)'">DELETE</button></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px;font-family:var(--font-mono)">No accounts found.</div>';
+  }catch(e){el.innerHTML='<div class="flash-msg flash-error" style="margin:0">Failed to load.</div>';}
 }
 
-async function deleteUser(id,username) {
-  if(!confirm('Delete user "'+username+'"? This cannot be undone.')) return;
-  const res=await fetch('/admin/delete-user/'+id,{method:'DELETE'});
+async function deleteUser(id,username){
+  if(!confirm(`Delete "${username}"? This cannot be undone.`)) return;
+  const res=await fetch(`/admin/delete-user/${id}`,{method:'DELETE'});
   const data=await res.json();
-  if(res.ok)loadUserList();else alert(data.error||'Delete failed.');
+  if(res.ok) loadUserList(); else alert(data.error||'Delete failed.');
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
-  setTimeout(async()=>{
-    try{const res=await fetch('/get_role');const data=await res.json();if(data.role==='admin'){const btn=document.getElementById('admin-panel-btn');if(btn)btn.style.display='flex';}}catch(e){}
-  },800);
-});
+// ── Init ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', initDashboard);
 </script>
 
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
-

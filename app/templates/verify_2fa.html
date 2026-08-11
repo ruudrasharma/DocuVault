@@ -3,306 +3,162 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Two-Factor Authentication — DOCUVault</title>
-  <meta name="description" content="Enter your 2FA code to verify your identity.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>DocuVault — 2FA Verification</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
-  <style>
-    body {
-      background:
-        radial-gradient(circle at 70% 10%, rgba(37,99,235,0.07), transparent 40%),
-        radial-gradient(circle at 20% 90%, rgba(23,37,84,0.05), transparent 35%),
-        var(--bg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 20px;
-    }
-
-    .twofa-container {
-      width: 100%;
-      max-width: 440px;
-      animation: appear 0.5s var(--ease-spring) both;
-    }
-
-    @keyframes appear {
-      from { opacity: 0; transform: translateY(20px) scale(0.96); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    /* Timer SVG ring */
-    .timer-ring-container {
-      width: 68px;
-      height: 68px;
-      position: relative;
-      flex-shrink: 0;
-    }
-
-    .timer-ring-container svg {
-      transform: rotate(-90deg);
-    }
-
-    .timer-ring-bg {
-      fill: none;
-      stroke: var(--surface-muted);
-      stroke-width: 4;
-    }
-
-    .timer-ring-progress {
-      fill: none;
-      stroke: var(--accent);
-      stroke-width: 4;
-      stroke-linecap: round;
-      transition: stroke-dashoffset 1s linear, stroke 0.3s;
-    }
-
-    .timer-ring-text {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--font-mono);
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .timer-ring-text.urgent { color: var(--danger); }
-
-    /* OTP input tweaks for this page */
-    .otp-grid { gap: 8px; }
-
-    @media (max-width: 400px) {
-      .otp-cell { width: 44px; height: 54px; font-size: 20px; }
-    }
-  </style>
 </head>
 <body>
 
-<div class="twofa-container">
+<div class="grid-bg"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="scanlines"></div>
+<canvas class="particles-canvas" id="particles"></canvas>
 
-  <!-- Back link -->
-  <a href="/login" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-muted);text-decoration:none;margin-bottom:24px;transition:color 0.15s" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    Back to Sign In
-  </a>
+<div class="login-wrap" style="z-index:10">
+  <div class="verify-card">
 
-  <!-- Main Card -->
-  <div class="card-elevated" style="border-radius:20px;overflow:hidden">
-
-    <!-- Card Header -->
-    <div style="background:var(--primary);padding:32px;text-align:center;position:relative;overflow:hidden">
-      <!-- Dot pattern -->
-      <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);background-size:24px 24px"></div>
-      <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(37,99,235,0.35),transparent 70%)"></div>
-
-      <!-- Shield icon -->
-      <div style="position:relative;z-index:1">
-        <div style="width:80px;height:80px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-          <img src="{{ url_for('static', filename='logo.png') }}" alt="DOCUVault" style="width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 6px 20px rgba(37,99,235,0.6))">
-        </div>
-        <h2 style="color:#fff;font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-bottom:4px">Two-Factor Authentication</h2>
-        <p style="color:rgba(255,255,255,0.6);font-size:14px;font-weight:400">Enter the 6-digit code from your authenticator app</p>
-      </div>
-    </div>
-
-    <!-- Card Body -->
-    <div class="card-body" style="padding:32px">
-
-      <!-- Flash messages -->
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:8px">
-            {% for category, message in messages %}
-              <div class="flash-msg error" style="position:static">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                {{ message }}
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
-
-      <!-- Timer + Info -->
-      <div style="display:flex;align-items:center;gap:16px;background:var(--surface-muted);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:4px">
-        <div class="timer-ring-container">
-          <svg width="68" height="68" viewBox="0 0 68 68">
-            <circle class="timer-ring-bg" cx="34" cy="34" r="28"/>
-            <circle class="timer-ring-progress" id="timer-ring" cx="34" cy="34" r="28"
-              stroke-dasharray="175.9"
-              stroke-dashoffset="0"/>
+    <!-- Header -->
+    <div class="login-header" style="text-align:center;padding:36px 40px 24px">
+      <!-- Animated shield icon -->
+      <div style="width:72px;height:72px;margin:0 auto 20px;position:relative">
+        <div style="width:72px;height:72px;border-radius:50%;background:rgba(0,212,255,0.08);border:1.5px solid rgba(0,212,255,0.3);display:flex;align-items:center;justify-content:center;animation:iconPulse 2s ease-in-out infinite">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="1.5">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4" stroke="#00FF88" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <div class="timer-ring-text" id="timer-display">30</div>
         </div>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:2px">Code expires in</div>
-          <div style="font-size:12px;color:var(--text-muted)">Open your authenticator app<br>to get the latest code.</div>
-        </div>
+        <!-- Rotating ring -->
+        <div style="position:absolute;inset:-8px;border-radius:50%;border:1px dashed rgba(0,212,255,0.3);animation:ringRotate 6s linear infinite"></div>
       </div>
 
-      <!-- OTP Form -->
-      <form method="post" id="twofa-form" onsubmit="handleSubmit(this)">
-
-        <!-- Hidden input that receives the composed OTP -->
-        <input type="hidden" name="totp" id="totp-hidden">
-
-        <!-- 6 individual OTP cells -->
-        <div class="otp-grid">
-          <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" data-index="0" id="otp-0" autocomplete="off" aria-label="Digit 1">
-          <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" data-index="1" id="otp-1" autocomplete="off" aria-label="Digit 2">
-          <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" data-index="2" id="otp-2" autocomplete="off" aria-label="Digit 3">
-          <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" data-index="3" id="otp-3" autocomplete="off" aria-label="Digit 4">
-          <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" data-index="4" id="otp-4" autocomplete="off" aria-label="Digit 5">
-          <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" data-index="5" id="otp-5" autocomplete="off" aria-label="Digit 6">
-        </div>
-
-        <div style="margin-top:8px">
-          <p id="otp-hint" class="form-hint" style="text-align:center">Type your 6-digit code — it will submit automatically.</p>
-        </div>
-
-        <button type="submit" id="verify-btn" class="btn btn-primary btn-xl btn-full" style="margin-top:24px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-          <span class="btn-text">Verify Identity</span>
-        </button>
-
-      </form>
-
-    </div>
-
-    <!-- Card Footer -->
-    <div class="card-footer" style="text-align:center">
-      <p style="font-size:12px;color:var(--text-muted)">
-        Lost access? Contact your system administrator to recover 2FA.
+      <h1 class="login-title" style="font-size:18px">TWO-FACTOR AUTH</h1>
+      <p style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:6px">
+        Open your authenticator app and enter the 6-digit code
       </p>
     </div>
 
-  </div>
+    <div class="login-body" style="padding:28px 40px 36px">
 
-  <!-- Bottom branding -->
-  <div style="text-align:center;margin-top:24px">
-    <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;gap:8px">
-      <div style="width:5px;height:5px;border-radius:50%;background:var(--success);animation:pulse-dot 2s ease-in-out infinite"></div>
-      DOCUVault · Secured by TOTP · RFC 6238
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash-msg flash-{{ 'error' if category == 'error' else 'success' }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="POST" action="/verify_2fa" id="otp-form">
+        <label class="form-label" style="text-align:center;display:block;margin-bottom:16px">
+          AUTHENTICATOR CODE
+        </label>
+
+        <!-- 6-digit OTP boxes -->
+        <div class="otp-input-row" style="margin-bottom:28px" id="otp-boxes">
+          <input type="text" maxlength="1" inputmode="numeric" class="otp-digit" data-idx="0" id="d0">
+          <input type="text" maxlength="1" inputmode="numeric" class="otp-digit" data-idx="1" id="d1">
+          <input type="text" maxlength="1" inputmode="numeric" class="otp-digit" data-idx="2" id="d2">
+          <input type="text" maxlength="1" inputmode="numeric" class="otp-digit" data-idx="3" id="d3">
+          <input type="text" maxlength="1" inputmode="numeric" class="otp-digit" data-idx="4" id="d4">
+          <input type="text" maxlength="1" inputmode="numeric" class="otp-digit" data-idx="5" id="d5">
+        </div>
+
+        <!-- Hidden real input -->
+        <input type="hidden" name="totp" id="totp-val">
+
+        <button type="submit" class="btn-primary" id="verify-btn">
+          <span id="verify-btn-text">⟶ VERIFY ACCESS</span>
+        </button>
+      </form>
+
+      <div style="margin-top:20px;text-align:center">
+        <a href="/logout" style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);text-decoration:none;transition:color 0.2s"
+          onmouseover="this.style.color='var(--cyan)'" onmouseout="this.style.color='var(--text-muted)'">
+          ← Back to Login
+        </a>
+      </div>
+
+      <!-- Timer -->
+      <div style="margin-top:16px;text-align:center">
+        <div class="chain-badge">
+          <div class="chain-dot"></div>
+          <span id="otp-timer" style="font-family:var(--font-mono);font-size:10px">Refreshes in <span id="countdown">30</span>s</span>
+        </div>
+      </div>
     </div>
   </div>
-
 </div>
 
 <script>
-  // ── OTP Cell Logic ──────────────────────────────────────
-  const cells = Array.from(document.querySelectorAll('.otp-cell'));
-  const hidden = document.getElementById('totp-hidden');
-
-  cells.forEach((cell, index) => {
-    cell.addEventListener('input', (e) => {
-      const val = e.target.value.replace(/[^0-9]/g, '');
-      cell.value = val.slice(-1);
-      cell.classList.toggle('filled', !!cell.value);
-      updateHidden();
-
-      if (cell.value && index < cells.length - 1) {
-        cells[index + 1].focus();
-      }
-
-      // Auto-submit when all filled
-      const code = cells.map(c => c.value).join('');
-      if (code.length === 6) {
-        setTimeout(() => submitForm(), 250);
-      }
+// Particles
+(function() {
+  const canvas = document.getElementById('particles');
+  const ctx = canvas.getContext('2d');
+  let W, H, pts = [];
+  function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  window.addEventListener('resize', resize); resize();
+  for(let i=0;i<40;i++) pts.push({x:Math.random()*9999,y:Math.random()*9999,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()+.3,a:Math.random()});
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    pts.forEach(p => {
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+      ctx.beginPath(); ctx.arc(p.x%W,p.y%H,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,212,255,${p.a*.5})`; ctx.fill();
     });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
 
-    cell.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !cell.value && index > 0) {
-        cells[index - 1].focus();
-        cells[index - 1].value = '';
-        cells[index - 1].classList.remove('filled');
-        updateHidden();
-      }
-      if (e.key === 'ArrowLeft'  && index > 0)                cells[index - 1].focus();
-      if (e.key === 'ArrowRight' && index < cells.length - 1) cells[index + 1].focus();
-    });
-
-    cell.addEventListener('paste', (e) => {
-      e.preventDefault();
-      const paste = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-      paste.split('').slice(0, 6).forEach((char, i) => {
-        if (cells[i]) {
-          cells[i].value = char;
-          cells[i].classList.add('filled');
-        }
-      });
-      cells[Math.min(paste.length, 5)].focus();
-      updateHidden();
-      if (paste.length >= 6) setTimeout(() => submitForm(), 250);
-    });
-
-    // Focus style
-    cell.addEventListener('focus', () => cell.select());
+// OTP input logic
+const digits = document.querySelectorAll('.otp-digit');
+digits.forEach((d, i) => {
+  d.addEventListener('input', e => {
+    const v = e.target.value.replace(/\D/g,'');
+    e.target.value = v;
+    if(v) { e.target.classList.add('filled'); if(i<5) digits[i+1].focus(); }
+    else e.target.classList.remove('filled');
+    syncOTP();
+    if(getAllDigits().length === 6) submitOTP();
   });
+  d.addEventListener('keydown', e => {
+    if(e.key==='Backspace' && !e.target.value && i>0) { digits[i-1].focus(); digits[i-1].value=''; digits[i-1].classList.remove('filled'); }
+    if(e.key==='ArrowLeft' && i>0) digits[i-1].focus();
+    if(e.key==='ArrowRight' && i<5) digits[i+1].focus();
+  });
+  d.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = (e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'').slice(0,6);
+    txt.split('').forEach((ch,j) => { if(digits[j]) { digits[j].value=ch; digits[j].classList.add('filled'); } });
+    syncOTP();
+    if(txt.length===6) submitOTP();
+  });
+});
 
-  function updateHidden() {
-    hidden.value = cells.map(c => c.value).join('');
-  }
+function getAllDigits() { return [...digits].map(d=>d.value).join(''); }
+function syncOTP() { document.getElementById('totp-val').value = getAllDigits(); }
+function submitOTP() {
+  syncOTP();
+  document.getElementById('verify-btn-text').textContent = '▶ VERIFYING...';
+  document.getElementById('otp-form').submit();
+}
 
-  function submitForm() {
-    const code = cells.map(c => c.value).join('');
-    if (code.length !== 6) return;
-    updateHidden();
-    const btn  = document.getElementById('verify-btn');
-    const text = btn.querySelector('.btn-text');
-    text.textContent = 'Verifying…';
-    btn.disabled = true;
-    document.getElementById('twofa-form').submit();
-  }
+// Auto focus first
+digits[0].focus();
 
-  function handleSubmit(form) {
-    updateHidden();
-    const btn  = document.getElementById('verify-btn');
-    const text = btn.querySelector('.btn-text');
-    text.textContent = 'Verifying…';
-    btn.disabled = true;
-  }
+// TOTP countdown
+let secs = 30;
+const cd = document.getElementById('countdown');
+setInterval(() => { secs = secs <= 1 ? 30 : secs-1; cd.textContent = secs; }, 1000);
 
-  // Error state: shake cells if flash error present
-  const hasError = document.querySelector('.flash-msg.error');
-  if (hasError) {
-    cells.forEach(c => { c.classList.add('error'); c.value = ''; c.classList.remove('filled'); });
-    setTimeout(() => cells.forEach(c => c.classList.remove('error')), 600);
-    cells[0].focus();
-  } else {
-    cells[0].focus();
-  }
-
-  // ── TOTP Timer Ring ────────────────────────────────────
-  (function startTimer() {
-    const ring      = document.getElementById('timer-ring');
-    const display   = document.getElementById('timer-display');
-    const circum    = 175.9;
-    const period    = 30;
-
-    function tick() {
-      const now     = Math.floor(Date.now() / 1000);
-      const elapsed = now % period;
-      const remain  = period - elapsed;
-      const offset  = circum * (elapsed / period);
-
-      ring.style.strokeDashoffset = offset.toFixed(2);
-      display.textContent = remain;
-
-      const isUrgent = remain <= 10;
-      display.classList.toggle('urgent', isUrgent);
-      ring.style.stroke = isUrgent ? 'var(--danger)' : 'var(--accent)';
-    }
-
-    tick();
-    setInterval(tick, 1000);
-  })();
+// Form submit
+document.getElementById('otp-form').addEventListener('submit', () => {
+  document.getElementById('verify-btn-text').textContent = '▶ VERIFYING...';
+});
 </script>
-
 </body>
 </html>
