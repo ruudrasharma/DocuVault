@@ -134,11 +134,15 @@ FIELD_PATTERNS = {
     # ── STUDENT NAME ─────────────────────────────────────────
     # "certify that" is the most reliable anchor in CBSE/university docs
     'name': [
-        r'(?:certify\s+that|certified\s+that)\s+([A-Z][A-Z\s]{2,50}?)(?:\s*\n|\s{2,}|$)',
-        r'(?:student\s+name|name\s+of\s+student|candidate)\s*[:\-]\s*([A-Z][A-Z\s]{2,40})',
-        r'(?:awarded\s+to|presented\s+to)\s+([A-Z][A-Z\s]{2,40})',
-        # Generic fallback — only if nothing above matched
-        r'^([A-Z][A-Z\s]{4,40})$',
+        # Pattern 1: CBSE — "This is to certify that RUDRA KUMAR SHARMA"
+        # Greedy match up to a newline or 2+ spaces (not lazy!)
+        r'(?:certify\s+that|certified\s+that)\s+([A-Z][A-Z\s]{3,50})(?=\s*\n|\s{2,}|ROLL|ANUKRAMANK|$)',
+        # Pattern 2: "Name: RUDRA KUMAR SHARMA" style
+        r'(?:student\s+name|name\s+of\s+student|candidate\s+name)\s*[:\-]\s*([A-Z][A-Z\s]{3,40})',
+        # Pattern 3: "Awarded to / Presented to"
+        r'(?:awarded\s+to|presented\s+to)\s+([A-Z][A-Z\s]{3,40})',
+        # Pattern 4: After "that" keyword across all board formats
+        r'\bTHAT\s+([A-Z]{2}[A-Z\s]{2,45})(?=\s*[\n\r]|\s{2,}|\d)',
     ],
 
     # ── ROLL / REGISTRATION NUMBER ───────────────────────────

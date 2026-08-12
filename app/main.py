@@ -65,6 +65,11 @@ def upload_doc():
     filename = secure_filename(file.filename)
     file_path = os.path.join(UPLOAD_FOLDER, filename)
 
+    # Form fields filled by the institution — used as fallback when OCR misses a field
+    form_holder = request.form.get('holder_name', '').strip()
+    form_doctype = request.form.get('doc_type', '').strip()
+    form_date    = request.form.get('issue_date', '').strip()
+
     try:
         file.save(file_path)
         logger.info("File saved: %s", file_path)
@@ -80,10 +85,19 @@ def upload_doc():
             enc_hash = b""
 
         # ── Step 6: DB record ────────────────────────────────
+        # Priority: OCR-extracted name > form-entered name
+        ocr_name    = norm_fields.get('name') or raw_fields.get('name', '')
+        ocr_doctype = norm_fields.get('degree') or raw_fields.get('degree', '')
+        ocr_date    = norm_fields.get('date') or raw_fields.get('date', '')
+
+        final_name    = ocr_name    or form_holder or ''
+        final_doctype = ocr_doctype or form_doctype or ''
+        final_date    = ocr_date    or form_date    or str(_dt.utcnow().date())
+
         meta = _json.dumps({
-            'holder_name': norm_fields.get('name') or raw_fields.get('name', ''),
-            'doc_type':    norm_fields.get('degree') or raw_fields.get('degree', ''),
-            'issue_date':  norm_fields.get('date') or raw_fields.get('date', str(_dt.utcnow().date())),
+            'holder_name': final_name,
+            'doc_type':    final_doctype,
+            'issue_date':  final_date,
             'filename':    filename,
             'block_index': block_index,
             'ocr_engine':  raw_fields.get('_engine', 'unknown'),
