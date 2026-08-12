@@ -73,14 +73,28 @@ def login():
 def verify_2fa():
     if 'user_id' not in session:
         return redirect(url_for('auth.login'))
+    user = User.query.get(session['user_id'])
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+
+    # Generate TOTP secret if user doesn't have one
+    if not user.totp_secret:
+        user.generate_totp_secret()
+        from . import db as _db
+        _db.session.commit()
+
     if request.method == 'POST':
         token = request.form.get('totp', '').strip()
-        user = User.query.get(session['user_id'])
-        if user and user.verify_totp(token):
+        if user.verify_totp(token):
             session['verified'] = True
             return redirect(url_for('main.dashboard', role=session['role']))
         flash('Invalid or expired OTP code. Try again.', 'error')
-    return render_template('verify_2fa.html')
+
+    # Always show QR so user can (re-)scan if needed
+    qr_b64  = make_qr_base64(user.get_totp_uri())
+    totp_uri = user.get_totp_uri()
+    return render_template('verify_2fa.html', qr_b64=qr_b64, totp_uri=totp_uri, username=user.username)
 
 
 @auth_bp.route('/logout', methods=['GET', 'POST'])

@@ -88,6 +88,29 @@
           <span id="otp-timer" style="font-family:var(--font-mono);font-size:10px">Refreshes in <span id="countdown">30</span>s</span>
         </div>
       </div>
+
+      <!-- QR Code setup section -->
+      {% if qr_b64 %}
+      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:20px">
+        <details>
+          <summary style="font-size:11px;font-family:var(--font-mono);color:var(--text-muted);cursor:pointer;letter-spacing:0.1em;text-transform:uppercase;text-align:center;list-style:none;outline:none">
+            ▸ First time? Scan QR to set up authenticator
+          </summary>
+          <div style="margin-top:16px;text-align:center">
+            <p style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:12px">
+              Scan with Google Authenticator or Authy for <strong style="color:var(--text-primary)">{{ username }}</strong>
+            </p>
+            <div style="display:inline-block;padding:12px;background:#fff;border-radius:12px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(15,23,42,0.08)">
+              <img src="data:image/png;base64,{{ qr_b64 }}" alt="2FA QR Code" style="width:160px;height:160px;display:block">
+            </div>
+            <p style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:10px;line-height:1.6">
+              After scanning, enter the 6-digit code above.<br>
+              This QR appears on every login — keep it private.
+            </p>
+          </div>
+        </details>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
