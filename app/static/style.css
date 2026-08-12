@@ -313,16 +313,16 @@ body {
 .login-card {
   width: 100%;
   max-width: 440px;
-  background: rgba(13,17,23,0.85);
+  background: rgba(255,255,255,0.92);
   backdrop-filter: blur(40px) saturate(200%);
   -webkit-backdrop-filter: blur(40px) saturate(200%);
-  border: 1px solid rgba(0,212,255,0.15);
+  border: 1px solid rgba(37,99,235,0.12);
   border-radius: 24px;
   overflow: hidden;
   box-shadow:
-    0 0 0 1px rgba(255,255,255,0.04) inset,
-    0 32px 80px rgba(0,0,0,0.6),
-    0 0 60px rgba(0,212,255,0.06);
+    0 0 0 1px rgba(255,255,255,0.9) inset,
+    0 32px 80px rgba(15,23,42,0.12),
+    0 0 60px rgba(37,99,235,0.05);
   animation: cardReveal 0.8s var(--ease-spring) both;
   animation-delay: 0.1s;
 }
@@ -374,7 +374,7 @@ body {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  background: linear-gradient(135deg, #fff 30%, var(--cyan));
+  background: linear-gradient(135deg, #0F172A 40%, var(--cyan));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -406,8 +406,8 @@ body {
 .form-input {
   width: 100%;
   padding: 12px 16px 12px 44px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(15,23,42,0.03);
+  border: 1px solid rgba(15,23,42,0.1);
   border-radius: var(--r-md);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -417,8 +417,8 @@ body {
 }
 .form-input:focus {
   border-color: var(--cyan);
-  background: rgba(0,212,255,0.04);
-  box-shadow: 0 0 0 3px rgba(0,212,255,0.12), 0 0 20px rgba(0,212,255,0.1);
+  background: rgba(37,99,235,0.04);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
 }
 .form-input::placeholder { color: var(--text-muted); }
 .form-input-icon {
@@ -499,8 +499,8 @@ body {
 .btn-google {
   width: 100%;
   padding: 13px 20px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: #FFFFFF;
+  border: 1px solid rgba(15,23,42,0.1);
   border-radius: var(--r-md);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -515,8 +515,8 @@ body {
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 .btn-google:hover {
-  background: rgba(255,255,255,0.07);
-  border-color: rgba(66,133,244,0.5);
+  background: #F8FAFF;
+  border-color: rgba(66,133,244,0.35);
   box-shadow: 0 0 0 3px rgba(66,133,244,0.1);
   transform: translateY(-1px);
 }
@@ -583,12 +583,12 @@ body {
 .verify-card {
   width: 100%;
   max-width: 400px;
-  background: rgba(13,17,23,0.9);
+  background: rgba(255,255,255,0.92);
   backdrop-filter: blur(40px);
-  border: 1px solid rgba(0,212,255,0.2);
+  border: 1px solid rgba(37,99,235,0.12);
   border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,212,255,0.08);
+  box-shadow: 0 32px 80px rgba(15,23,42,0.1), 0 0 60px rgba(37,99,235,0.04);
   animation: cardReveal 0.7s var(--ease-spring) both;
 }
 
@@ -599,7 +599,7 @@ body {
 }
 .otp-digit {
   width: 48px; height: 56px;
-  background: rgba(255,255,255,0.03);
+  background: rgba(15,23,42,0.03);
   border: 1.5px solid var(--border);
   border-radius: var(--r-md);
   color: var(--cyan);
@@ -613,7 +613,7 @@ body {
 .otp-digit:focus {
   border-color: var(--cyan);
   background: var(--cyan-dim);
-  box-shadow: 0 0 0 3px rgba(0,212,255,0.15), var(--cyan-glow);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
   transform: scale(1.05);
 }
 .otp-digit.filled {
@@ -651,15 +651,16 @@ body {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: 60px;
-  background: rgba(8,11,20,0.85);
+  background: rgba(255,255,255,0.9);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(15,23,42,0.08);
   z-index: 100;
   display: flex;
   align-items: center;
   padding: 0 24px;
   gap: 16px;
+  box-shadow: 0 1px 20px rgba(15,23,42,0.06);
 }
 .topbar-logo {
   font-family: var(--font-display);
@@ -731,9 +732,9 @@ body {
   left: 0;
   bottom: 0;
   width: 60px;
-  background: rgba(8,11,20,0.7);
+  background: rgba(255,255,255,0.88);
   backdrop-filter: blur(20px);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid rgba(15,23,42,0.07);
   z-index: 90;
   display: flex;
   flex-direction: column;
@@ -741,6 +742,7 @@ body {
   padding: 16px 0;
   gap: 4px;
   transition: width 0.3s var(--ease-out);
+  box-shadow: 1px 0 16px rgba(15,23,42,0.04);
 }
 .nav-ribbon:hover { width: 180px; }
 .nav-item {
@@ -823,9 +825,9 @@ body {
   margin-bottom: 28px;
 }
 .stat-card {
-  background: rgba(13,17,23,0.8);
+  background: rgba(255,255,255,0.88);
   backdrop-filter: blur(20px);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(15,23,42,0.07);
   border-radius: var(--r-xl);
   padding: 24px;
   position: relative;
@@ -833,6 +835,7 @@ body {
   cursor: default;
   transition: border-color 0.3s, transform 0.3s var(--ease-spring), box-shadow 0.3s;
   animation: fadeUp 0.5s var(--ease-out) both;
+  box-shadow: 0 2px 12px rgba(15,23,42,0.05);
 }
 .stat-card:nth-child(1) { animation-delay: 0.05s; }
 .stat-card:nth-child(2) { animation-delay: 0.1s; }
