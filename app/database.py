@@ -54,7 +54,7 @@ class User(db.Model, UserMixin):
         if not self.totp_secret:
             return False
         totp = pyotp.TOTP(self.totp_secret)
-        return totp.verify(token, valid_window=1)
+        return totp.verify(token, valid_window=2)
 
 
 class PendingAccount(db.Model):
@@ -75,7 +75,7 @@ class PendingAccount(db.Model):
 
     def verify_otp(self, token):
         totp = pyotp.TOTP(self.totp_secret)
-        return totp.verify(token, valid_window=1)
+        return totp.verify(token, valid_window=2)
 
 
 @login_manager.user_loader

@@ -59,13 +59,23 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
+        logger.info(f'Login attempt: username={username!r}')
         user = User.query.filter_by(username=username).first()
-        if user and user.oauth_provider == 'local' and user.check_password(password):
+        if not user:
+            logger.warning(f'Login failed: user {username!r} not found')
+            flash('Invalid credentials', 'error')
+        elif user.oauth_provider != 'local':
+            logger.warning(f'Login failed: {username!r} is oauth_provider={user.oauth_provider!r}, not local')
+            flash('This account uses Google Sign-In. Use the Google button below.', 'error')
+        elif not user.check_password(password):
+            logger.warning(f'Login failed: wrong password for {username!r}')
+            flash('Invalid credentials — wrong password', 'error')
+        else:
             session['user_id'] = user.id
             session['role'] = user.role
             session['username'] = user.username
+            logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
             return redirect(url_for('auth.verify_2fa'))
-        flash('Invalid credentials', 'error')
     return render_template('login.html')
 
 
