@@ -172,16 +172,7 @@ body {
   top: 40%; left: 35%;
   animation: blob3 18s ease-in-out infinite;
 }
-/* Extra blobs for richness */
-.orb::before {
-  content: '';
-  position: absolute;
-  width: 40%; height: 40%;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.4);
-  top: 20%; left: 20%;
-  filter: blur(20px);
-}
+/* orb inner highlight removed */
 @keyframes blob1 {
   0%   { transform: translate(0px,   0px) scale(1);    border-radius: 50%; }
   20%  { transform: translate(60px, -80px) scale(1.08); border-radius: 60% 40% 70% 30%/50% 60% 40% 50%; }
@@ -220,25 +211,10 @@ body {
   transition: opacity 1s cubic-bezier(0.4,0,1,1), visibility 1s;
   overflow: hidden;
 }
-#splash::before {
-  content: '';
-  position: absolute;
-  width: 800px; height: 800px;
-  background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 60%);
-  border-radius: 50%;
-  top: 50%; left: 50%;
-  transform: translate(-50%,-50%);
-  animation: splashPulse 4s ease-in-out infinite;
-  pointer-events: none;
-}
 @keyframes splashBg {
   0%   { background-position: 0% 50%; }
   50%  { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
-}
-@keyframes splashPulse {
-  0%, 100% { transform: translate(-50%,-50%) scale(1); opacity: 0.8; }
-  50%       { transform: translate(-50%,-50%) scale(1.3); opacity: 0.4; }
 }
 #splash.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 
@@ -353,30 +329,50 @@ body {
 /* Boot sequence text */
 .splash-boot {
   font-family: var(--font-mono);
-.boot-line:nth-child(2) { animation-delay: 1.8s; }
-.boot-line:nth-child(3) { animation-delay: 2.2s; }
-.boot-line:nth-child(4) { animation-delay: 2.6s; }
-@keyframes bootLine { to { opacity: 1; } }
+  font-size: 12px;
+  color: #4F46E5;
+  text-align: center;
+  line-height: 2;
+  animation: fadeUp 0.6s var(--ease-out) both;
+  animation-delay: 1.0s;
+  min-height: 90px;
+}
+.boot-line {
+  opacity: 0;
+  transform: translateX(-20px);
+  animation: bootSlide 0.5s var(--ease-spring) forwards;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.boot-line:nth-child(1) { animation-delay: 1.2s; }
+.boot-line:nth-child(2) { animation-delay: 1.6s; }
+.boot-line:nth-child(3) { animation-delay: 2.0s; }
+.boot-line:nth-child(4) { animation-delay: 2.4s; color: #059669; font-weight: 600; }
+@keyframes bootSlide { to { opacity: 1; transform: translateX(0); } }
 
 /* Progress bar */
 .splash-bar-wrap {
-  width: 260px;
+  width: 300px;
   animation: fadeUp 0.4s var(--ease-out) both;
-  animation-delay: 1.3s;
+  animation-delay: 1.1s;
 }
 .splash-bar-track {
-  height: 2px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 1px;
+  height: 3px;
+  background: rgba(99,102,241,0.12);
+  border-radius: 2px;
   overflow: hidden;
+  position: relative;
 }
 .splash-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--green));
-  border-radius: 1px;
-  animation: barFill 2.5s var(--ease-out) both;
-  animation-delay: 1.5s;
-  box-shadow: 0 0 12px var(--cyan);
+  background: linear-gradient(90deg, #4F46E5, #2563EB, #059669, #7C3AED);
+  background-size: 300% 100%;
+  border-radius: 2px;
+  animation: barFill 2.8s var(--ease-out) both;
+  animation-delay: 1.3s;
+  box-shadow: 0 0 10px rgba(79,70,229,0.5);
 }
 @keyframes barFill { from { width: 0%; } to { width: 100%; } }
 
@@ -1201,7 +1197,7 @@ body {
 }
 
 /* ── Particles ───────────────────────────────────────────────── */
-.particles-canvas { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.15; }
+.particles-canvas { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.1; }
 
 /* ── Loading / typing cursor ─────────────────────────────────── */
 .typing-cursor {
