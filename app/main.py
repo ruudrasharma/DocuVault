@@ -190,12 +190,19 @@ def verify_document():
             'block_hash':    block_data.get('_block_hash'),
             'issuer':        block_data.get('issuer', '—'),
             'issued_at':     issued_str,
+            # Primary identity fields
             'holder_name':   fs.get('name') or db_meta.get('holder_name', '—'),
             'doc_type':      fs.get('degree') or db_meta.get('doc_type', '—'),
             'issue_date':    fs.get('date') or db_meta.get('issue_date', '—'),
-            'institute':     fs.get('institute', '—'),
-            'grade':         fs.get('grade', '—'),
-            'roll_no':       fs.get('roll_no', '—'),
+            # Extended CBSE / marksheet fields
+            'roll_no':       fs.get('roll_no', norm_fields.get('roll_no', '—')),
+            'board':         fs.get('board', norm_fields.get('board', '—')),
+            'institute':     fs.get('institute', norm_fields.get('institute', '—')),
+            'grade':         fs.get('grade', norm_fields.get('grade', '—')),
+            'year':          fs.get('year', norm_fields.get('year', '—')),
+            'mothers_name':  fs.get('mothers_name', norm_fields.get('mothers_name', '—')),
+            'fathers_name':  fs.get('fathers_name', norm_fields.get('fathers_name', '—')),
+            'date_of_birth': fs.get('date_of_birth', norm_fields.get('date_of_birth', '—')),
             'fields':        {k: v for k, v in norm_fields.items() if v},
             'zkp_verified':  True,
         })

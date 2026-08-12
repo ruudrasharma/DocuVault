@@ -127,42 +127,117 @@ def ocr_tesseract(images: list) -> tuple[str, float]:
 
 
 # ── Field extraction ───────────────────────────────────────────
+# Priority-ordered patterns for each field.
+# Earlier patterns = higher priority. First match wins.
+
 FIELD_PATTERNS = {
+    # ── STUDENT NAME ─────────────────────────────────────────
+    # "certify that" is the most reliable anchor in CBSE/university docs
     'name': [
-        r'(?:name|student|holder)[:\s]+([A-Z][A-Za-z\s]{2,40})',
-        r'(?:to|awarded to|certify that)[:\s]+([A-Z][A-Za-z\s]{2,40})',
+        r'(?:certify\s+that|certified\s+that)\s+([A-Z][A-Z\s]{2,50}?)(?:\s*\n|\s{2,}|$)',
+        r'(?:student\s+name|name\s+of\s+student|candidate)\s*[:\-]\s*([A-Z][A-Z\s]{2,40})',
+        r'(?:awarded\s+to|presented\s+to)\s+([A-Z][A-Z\s]{2,40})',
+        # Generic fallback — only if nothing above matched
+        r'^([A-Z][A-Z\s]{4,40})$',
     ],
+
+    # ── ROLL / REGISTRATION NUMBER ───────────────────────────
     'roll_no': [
-        r'(?:roll\s*no|reg(?:istration)?\s*no|enrol(?:lment)?)[.:\s]+([A-Z0-9/-]{4,20})',
+        r'(?:roll\s*no|roll\s*number|anukramank)[.:\s]+([A-Z0-9]{4,20})',
+        r'(?:reg(?:istration)?\s*no|enrol(?:lment)?\s*no)[.:\s]+([A-Z0-9/-]{4,20})',
+        r'(?:regd?\.?\s*no)[.:\s]+([A-Z0-9/-]{4,20})',
     ],
+
+    # ── DATE (issue / exam) ───────────────────────────────────
     'date': [
-        r'(?:date|issued?|awarded?)[:\s]+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})',
-        r'(\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4})',
+        r'(?:dated?|issued?)[.:\s]+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})',
+        r'(?:date\s+of\s+issue|date\s+of\s+examination)[.:\s]+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})',
+        r'(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4})',   # bare date fallback
     ],
+
+    # ── DATE OF BIRTH ────────────────────────────────────────
+    'date_of_birth': [
+        r'(?:date\s+of\s+birth|dob|janm\s+tithi)[.:\s]+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})',
+        r'(?:born\s+on)[.:\s]+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})',
+    ],
+
+    # ── DEGREE / EXAM ────────────────────────────────────────
     'degree': [
-        r'(?:degree|course|programme)[:\s]+([A-Za-z\s\.]{3,60})',
-        r'(bachelor|master|doctor|diploma|certificate)\s+(?:of\s+)?[A-Za-z\s]{2,40}',
+        r'(?:secondary\s+school\s+examination|higher\s+secondary|senior\s+secondary)',
+        r'(?:degree|course|programme|examination)[.:\s]+([A-Za-z\s\.]{3,70})',
+        r'(bachelor|master|doctor|diploma|certificate)\s+(?:of\s+)?[A-Za-z\s]{2,50}',
+        r'(b\.?tech|m\.?tech|b\.?sc|m\.?sc|b\.?com|m\.?com|b\.?a\.?|m\.?a\.?)',
     ],
+
+    # ── BOARD / UNIVERSITY ───────────────────────────────────
+    'board': [
+        r'(central\s+board\s+of\s+secondary\s+education|cbse)',
+        r'(board\s+of\s+(?:secondary|higher)\s+education[^,\n]{0,50})',
+        r'([A-Z][A-Za-z\s]+(?:university|board|institute)[^,\n]{0,40})',
+    ],
+
+    # ── SCHOOL / INSTITUTE ────────────────────────────────────
     'institute': [
-        r'(?:university|institute|college|school)\s+of\s+[A-Za-z\s]{2,60}',
-        r'([A-Z][A-Za-z\s]+(?:university|institute|college|school))',
+        r'(?:school|vidyalaya)[.:\s]+\d+\s*[-–]\s*([A-Z][A-Za-z\s,\.]{4,80})',
+        r'(?:school|college|institute|university)[.:\s]+([A-Z][A-Za-z\s,\.]{4,80})',
+        r'([A-Z][A-Z\s]{4,60}(?:SCHOOL|COLLEGE|INSTITUTE|UNIVERSITY))',
     ],
+
+    # ── YEAR ─────────────────────────────────────────────────
+    'year': [
+        r'(?:examination|exam)[,\s]+(\d{4})',
+        r'(?:year\s+of\s+passing|passed\s+in)[.:\s]+(\d{4})',
+        r'\b(20[0-9]{2}|19[0-9]{2})\b',
+    ],
+
+    # ── GRADE / PERCENTAGE ───────────────────────────────────
     'grade': [
-        r'(?:grade|cgpa|percentage|marks)[:\s]+([\d\.]+\s*(?:%|\/\d+)?)',
+        r'(?:overall\s+grade|final\s+grade)[.:\s]+([A-E][1-9]?)',
+        r'(?:cgpa|percentage|total\s+marks)[.:\s]+([\d\.]+\s*(?:%|\/\d+)?)',
+    ],
+
+    # ── MOTHER'S NAME (separate from student name) ───────────
+    'mothers_name': [
+        r"(?:mother(?:'s)?\s+name|mata\s+ka\s+naam)[.:\s]+([A-Z][A-Z\s]{2,40})",
+    ],
+
+    # ── FATHER'S NAME ────────────────────────────────────────
+    'fathers_name': [
+        r"(?:father(?:'s)?(?:\s*/\s*guardian(?:'s)?)?\s+name|pita)[.:\s]+([A-Z][A-Z\s]{2,40})",
     ],
 }
 
 
 def extract_fields(text: str) -> dict:
-    text_lower = text.lower()
-    text_lines = text
+    """
+    Extract structured fields from OCR text using priority-ordered regex patterns.
+    Returns a dict with matched fields only (no 'Unknown' placeholders).
+    """
     found = {}
+    # Normalise: collapse whitespace runs but keep line breaks for multiline patterns
+    clean = re.sub(r'[ \t]+', ' ', text).upper()
+
     for field, patterns in FIELD_PATTERNS.items():
         for pat in patterns:
-            m = re.search(pat, text_lines, re.IGNORECASE)
-            if m:
-                found[field] = m.group(1).strip() if m.lastindex else m.group(0).strip()
-                break
+            try:
+                m = re.search(pat, clean, re.IGNORECASE | re.MULTILINE)
+                if m:
+                    val = (m.group(1) if m.lastindex else m.group(0)).strip()
+                    val = re.sub(r'\s+', ' ', val)
+                    if len(val) >= 2:
+                        found[field] = val
+                        break
+            except re.error:
+                continue
+
+    # Post-process: strip trailing noise from name
+    if 'name' in found:
+        # Remove common trailing words that leak in
+        for noise in ('ROLL', 'ANUKRAMANK', 'MATA', 'MOTHER', 'FATHER', 'DATE', 'DOB'):
+            idx = found['name'].find(noise)
+            if idx > 0:
+                found['name'] = found['name'][:idx].strip()
+
     return found
 
 

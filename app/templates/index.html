@@ -669,37 +669,72 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
     return;
   }
   resultEl.style.display = 'block';
-  resultEl.innerHTML = '<div style="text-align:center;padding:24px;font-family:var(--font-mono);font-size:12px;color:var(--cyan)">▶ Querying blockchain<span class="typing-cursor"></span></div>';
+  resultEl.innerHTML = '<div style="text-align:center;padding:24px;font-family:var(--font-mono);font-size:12px;color:var(--cyan)">▶ Running OCR + querying blockchain<span class="typing-cursor"></span></div>';
   const fd = new FormData();
   fd.append('file', vfInp2.files[0]);
   try {
     const res = await fetch('/verify_document', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.error) {
-      resultEl.innerHTML = `<div class="flash-msg flash-error">${data.error}</div>`;
+    const d = await res.json();
+    if (d.error) {
+      resultEl.innerHTML = `<div class="flash-msg flash-error">${d.error}</div>`;
       return;
     }
-    if (data.verified) {
-      resultEl.innerHTML = `<div class="verify-result verify-success" style="text-align:center">
-        <div class="result-icon ok">✓</div>
-        <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--green);letter-spacing:0.08em">DOCUMENT VERIFIED</div>
-        <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;text-align:left">
-          ${data.holder_name ? `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11px;font-family:var(--font-mono)"><span style="color:var(--text-muted)">Holder</span><span style="color:var(--text-primary)">${data.holder_name}</span></div>` : ''}
-          ${data.doc_type ? `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11px;font-family:var(--font-mono)"><span style="color:var(--text-muted)">Type</span><span style="color:var(--text-primary)">${data.doc_type}</span></div>` : ''}
-          ${data.issue_date ? `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11px;font-family:var(--font-mono)"><span style="color:var(--text-muted)">Issued</span><span style="color:var(--text-primary)">${data.issue_date}</span></div>` : ''}
-        </div>
-      </div>`;
+
+    // Helper: render a data row only if value exists and isn't "—"
+    const row = (label, val, accent) => (!val || val === '—') ? '' :
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:rgba(0,0,0,0.18);border-radius:6px;font-size:11px;font-family:var(--font-mono);gap:8px">
+        <span style="color:var(--text-muted);min-width:110px">${label}</span>
+        <span style="color:${accent||'var(--text-primary)'};text-align:right;word-break:break-all">${val}</span>
+       </div>`;
+
+    if (d.verified) {
+      resultEl.innerHTML = `
+        <div class="verify-result verify-success">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <div class="result-icon ok" style="flex-shrink:0">✓</div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--green);letter-spacing:0.08em">DOCUMENT VERIFIED</div>
+              <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px">
+                ZKP ✓ · Block #${d.block_index||'?'} · Issued by ${d.issuer||'?'} · ${d.issued_at||''}
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            ${row('Student', d.holder_name, 'var(--cyan)')}
+            ${row('Roll No', d.roll_no, 'var(--cyan)')}
+            ${row('Exam / Degree', d.doc_type)}
+            ${row('Board', d.board)}
+            ${row('School / Institute', d.institute)}
+            ${row('Year', d.year)}
+            ${row('Date of Birth', d.date_of_birth)}
+            ${row("Mother's Name", d.mothers_name)}
+            ${row("Father's Name", d.fathers_name)}
+            ${row('Grade / CGPA', d.grade)}
+            ${row('Issue Date', d.issue_date)}
+          </div>
+
+          <div style="margin-top:12px;padding:8px 12px;background:rgba(0,0,0,0.25);border-radius:6px">
+            <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">SHA-256 BLOCKCHAIN HASH</div>
+            <code style="font-family:var(--font-mono);font-size:10px;color:rgba(0,212,255,0.7);word-break:break-all">${d.hash}</code>
+          </div>
+        </div>`;
     } else {
-      resultEl.innerHTML = `<div class="verify-result verify-fail" style="text-align:center">
-        <div class="result-icon fail">✗</div>
-        <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:#F87171;letter-spacing:0.08em">NOT FOUND</div>
-        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">No matching record on blockchain</div>
-      </div>`;
+      resultEl.innerHTML = `
+        <div class="verify-result verify-fail" style="text-align:center">
+          <div class="result-icon fail">✗</div>
+          <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:#F87171;letter-spacing:0.08em">NOT VERIFIED</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">
+            No matching record on blockchain.<br>This document may be tampered or not registered.
+          </div>
+          ${d.hash && d.hash !== 'N/A' ? `<div style="margin-top:10px;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px"><code style="font-size:9px;font-family:var(--font-mono);color:rgba(248,113,113,0.6);word-break:break-all">${d.hash}</code></div>` : ''}
+        </div>`;
     }
   } catch (err) {
     resultEl.innerHTML = '<div class="flash-msg flash-error">Network error. Try again.</div>';
   }
 });
+
 
 // ── Admin panel ────────────────────────────────────────────────
 let _pendingId=null;

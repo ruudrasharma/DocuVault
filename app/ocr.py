@@ -28,14 +28,15 @@ CANONICAL_KEYS = [
     "name",
     "roll_no",
     "date",
+    "date_of_birth",
     "degree",
     "institute",
+    "board",
     "grade",
-    "date_of_birth",
+    "year",
+    "mothers_name",
     "fathers_name",
     "subject",
-    "board",
-    "year",
 ]
 
 
