@@ -70,14 +70,26 @@ def file_to_images(file_bytes: bytes, ext: str) -> list:
     if ext == 'pdf':
         try:
             from pdf2image import convert_from_bytes
-            images = convert_from_bytes(file_bytes, dpi=200)
+            # 150 DPI is enough for OCR and much faster than 200
+            imgs = convert_from_bytes(file_bytes, dpi=150)
+            images = imgs[:3]   # cap at first 3 pages — marksheets are 1-2 pages
         except Exception as e:
             raise ValueError(f"PDF conversion failed: {e}")
     elif ext in ('jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'webp'):
         images = [Image.open(io.BytesIO(file_bytes)).convert('RGB')]
     else:
         raise ValueError(f"Unsupported file type: .{ext}")
-    return images
+
+    # Resize any image larger than 3000px on longest side (keeps OCR fast)
+    MAX_SIDE = 3000
+    resized = []
+    for img in images:
+        w, h = img.size
+        if max(w, h) > MAX_SIDE:
+            scale = MAX_SIDE / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        resized.append(img)
+    return resized
 
 
 # ── OCR engines ────────────────────────────────────────────────
@@ -170,20 +182,6 @@ def health():
 
 @app.route('/ocr', methods=['POST'])
 def ocr_extract():
-    """
-    POST /ocr
-    Body: multipart/form-data with 'file' field
-    Optional form field: engine=easyocr|tesseract|auto (default: auto)
-
-    Returns:
-      {
-        "text": "...",
-        "engine": "easyocr",
-        "confidence": 0.92,
-        "pages": 1,
-        "chars": 420
-      }
-    """
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided. Send as multipart/form-data with field "file".'}), 400
 
@@ -191,6 +189,7 @@ def ocr_extract():
     if not f.filename:
         return jsonify({'error': 'Empty filename'}), 400
 
+    # Allow caller to request a specific engine
     engine_pref = request.form.get('engine', 'auto').lower()
     ext = Path(f.filename).suffix.lstrip('.')
 
@@ -202,21 +201,22 @@ def ocr_extract():
 
     text, conf, engine_used = '', 0.0, 'none'
 
-    # Try engines in preferred order
-    if engine_pref in ('easyocr', 'auto'):
-        try:
-            text, conf = ocr_easyocr(images)
-            engine_used = 'easyocr'
-        except Exception as e:
-            logger.warning(f"EasyOCR failed: {e}")
-
-    if not text and engine_pref in ('tesseract', 'auto'):
+    # Tesseract first when requested or auto — it's much faster on CPU
+    if engine_pref in ('tesseract', 'auto'):
         try:
             if check_tesseract():
                 text, conf = ocr_tesseract(images)
                 engine_used = 'tesseract'
         except Exception as e:
             logger.warning(f"Tesseract failed: {e}")
+
+    # EasyOCR as fallback (or if explicitly requested)
+    if (not text and engine_pref == 'auto') or engine_pref == 'easyocr':
+        try:
+            text, conf = ocr_easyocr(images)
+            engine_used = 'easyocr'
+        except Exception as e:
+            logger.warning(f"EasyOCR failed: {e}")
 
     if not text:
         return jsonify({'error': 'All OCR engines failed. Check server logs.'}), 500
@@ -232,30 +232,13 @@ def ocr_extract():
 
 @app.route('/ocr/fields', methods=['POST'])
 def ocr_fields():
-    """
-    POST /ocr/fields
-    Same as /ocr but also returns extracted structured fields.
-
-    Returns:
-      {
-        "text": "...",
-        "fields": {
-          "name": "Rudra Sharma",
-          "degree": "Bachelor of Technology",
-          "date": "15/05/2024",
-          ...
-        },
-        "engine": "easyocr",
-        "confidence": 0.91
-      }
-    """
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
-    # Re-use the /ocr logic
     f = request.files['file']
     ext = Path(f.filename).suffix.lstrip('.')
     file_bytes = f.read()
+    engine_pref = request.form.get('engine', 'auto').lower()
 
     try:
         images = file_to_images(file_bytes, ext)
@@ -263,19 +246,23 @@ def ocr_fields():
         return jsonify({'error': str(e)}), 400
 
     text, conf, engine_used = '', 0.0, 'none'
-    try:
-        text, conf = ocr_easyocr(images)
-        engine_used = 'easyocr'
-    except Exception:
-        pass
 
-    if not text:
+    # Tesseract first when auto or explicitly requested — 10x faster on CPU
+    if engine_pref in ('tesseract', 'auto'):
         try:
             if check_tesseract():
                 text, conf = ocr_tesseract(images)
                 engine_used = 'tesseract'
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Tesseract failed: {e}")
+
+    # EasyOCR fallback
+    if (not text and engine_pref == 'auto') or engine_pref == 'easyocr':
+        try:
+            text, conf = ocr_easyocr(images)
+            engine_used = 'easyocr'
+        except Exception as e:
+            logger.warning(f"EasyOCR failed: {e}")
 
     if not text:
         return jsonify({'error': 'OCR failed'}), 500

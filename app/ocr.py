@@ -18,7 +18,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 OCR_SERVICE_URL = os.environ.get("OCR_SERVICE_URL", "http://127.0.0.1:5002")
-OCR_TIMEOUT = int(os.environ.get("OCR_TIMEOUT", "60"))  # seconds
+OCR_TIMEOUT = int(os.environ.get("OCR_TIMEOUT", "120"))  # seconds
 
 # ── Field normalisation ────────────────────────────────────────────────────────
 
@@ -76,6 +76,7 @@ def extract_fields(file_path: str) -> dict:
             resp = requests.post(
                 f"{OCR_SERVICE_URL}/ocr/fields",
                 files={"file": (os.path.basename(file_path), f)},
+                data={"engine": "tesseract"},   # tesseract is 10x faster on CPU
                 timeout=OCR_TIMEOUT,
             )
         resp.raise_for_status()
