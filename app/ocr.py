@@ -1,331 +1,202 @@
-import re
-from PIL import Image
-import io
-import numpy as np
-import cv2
-import pytesseract
-import fitz
-import logging
-import sys
+"""
+app/ocr.py — DocuVault OCR + Hashing Pipeline
+================================================
+Calls the OCR microservice (localhost:5002) instead of running OCR in-process.
+
+Flow:
+  file_path → OCR service → field dict → normalize → SHA-256 → blockchain
+"""
+
 import hashlib
 import json
+import logging
+import os
+import sys
 
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+import requests
 
-logging.basicConfig(filename='ocr_debug.log', level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
 
-def deskew(image):
-    coords = np.column_stack(np.where(image == 0))
-    if len(coords) == 0:
-        return image
-    angle = cv2.minAreaRect(coords)[-1]
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
-    (h, w) = image.shape[:2]
-    center = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=255)
-    return rotated
+OCR_SERVICE_URL = os.environ.get("OCR_SERVICE_URL", "http://127.0.0.1:5002")
+OCR_TIMEOUT = int(os.environ.get("OCR_TIMEOUT", "60"))  # seconds
 
-def image_smoothening(img):
-    ret1, th1 = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
-    ret2, th2 = cv2.threshold(th1, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    blur = cv2.GaussianBlur(th2, (1, 1), 0)
-    ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return th3
+# ── Field normalisation ────────────────────────────────────────────────────────
 
-def preprocess_image(image_path):
-    if not image_path.lower().endswith('.pdf'):
-        img = Image.open(image_path)
-        pdf_bytes = io.BytesIO()
-        img.save(pdf_bytes, format='PDF')
-        pdf_bytes.seek(0)
-        doc = fitz.open(stream=pdf_bytes, filetype='pdf')
-    else:
-        doc = fitz.open(image_path)
-    
-    page = doc[0]
-    mat = fitz.Matrix(8, 8)
-    pix = page.get_pixmap(matrix=mat)
-    img_data = pix.tobytes("ppm")
-    img = Image.open(io.BytesIO(img_data))
-    doc.close()
-    
-    img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
-    filtered = cv2.bilateralFilter(gray, 11, 17, 17)
-    filtered = cv2.GaussianBlur(filtered, (3, 3), 0)
-    thresh = cv2.threshold(filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    kernel = np.ones((2, 2), np.uint8)
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
-    closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel, iterations=2)
-    smooth = image_smoothening(gray)
-    processed = cv2.bitwise_or(closing, smooth)
-    processed = deskew(processed)
-    logging.info(f"Preprocessed image shape: {processed.shape}")
-    return processed
+# These are the canonical keys we care about for hashing.
+# Any key missing from OCR output defaults to "" so the hash is still stable.
+CANONICAL_KEYS = [
+    "name",
+    "roll_no",
+    "date",
+    "degree",
+    "institute",
+    "grade",
+    "date_of_birth",
+    "fathers_name",
+    "subject",
+    "board",
+    "year",
+]
 
-def extract_fields(file_path):
-    processed_image = preprocess_image(file_path)
-    configs = [
-        r'--oem 3 --psm 6 -l eng',
-        r'--oem 3 --psm 4 -l eng',
-        r'--oem 3 --psm 3 -l eng',
-        r'--oem 3 --psm 1 -l eng',
-        r'--oem 1 --psm 6 -l eng'
-    ]
-    best_text = ""
-    for config in configs:
-        text = pytesseract.image_to_string(processed_image, config=config)
-        if len(text.strip()) > len(best_text.strip()):
-            best_text = text
-    
-    text = best_text
-    print("Full Raw OCR Text:\n", repr(text))
-    logging.info(f"Full Raw OCR text: {repr(text)}")
-    
-    lines = [re.sub(r'[^\w\s\-/:.]', '', line.strip()) for line in text.split('\n') if line.strip()]
-    full_text = ' '.join(lines)
-    
-    result = {
-        "regn_no": "Unknown",
-        "name": "Unknown",
-        "roll_no": "Unknown",
-        "fathers_guardians_name": "Unknown",
-        "date_of_birth": "Unknown",
-        "date_of_birth_descriptive": "Unknown",
-        "school": "Unknown",
-        "marks": {}
-    }
-    
-    regn_patterns = [
-        r'Regn\.?No\.?\s*[:\-—]?\s*([A-Z0-9/]+)',
-        r'Registration\s*No\.?\s*[:\-—]?\s*([A-Z0-9/]+)',
-        r'Regn\s*No\.?\s*[:\-—]?\s*([A-Z0-9/]+)',
-        r'Ragin\.?\s*[:\-—]?\s*([A-Z0-9/]+)'
-    ]
-    for pattern in regn_patterns:
-        match = re.search(pattern, full_text, re.IGNORECASE)
-        if match and match.group(1):
-            result["regn_no"] = match.group(1).strip().upper()
-            break
-    
-    name_patterns = [
-        r'(?i)certify that\s+([A-Z\s]+?)(?=\s+Roll|Mother|Father|Date|School|$)',
-        r'(?i)this is to certify that\s+([A-Z\s]+?)(?=\s+Roll|Mother|Father|Date|School|$)',
-        r'(?i)this ts to certiry that\s+([A-Z\s]+?)(?=\s+Roll|Mother|Father|Date|School|$)'
-    ]
-    for pattern in name_patterns:
-        match = re.search(pattern, full_text)
-        if match and match.group(1):
-            name = re.sub(r'[^A-Z\s]', '', match.group(1)).strip().upper()
-            result["name"] = re.sub(r'\s+', ' ', name)
-            break
-    
-    roll_patterns = [
-        r'Roll No\.?\s*[:\-]?\s*(\d+)',
-        r'Roll\s*[:\-]?\s*(\d+)',
-        r'Roll Number\s*[:\-]?\s*(\d+)',
-        r'Roll-No\.\s*(\d+)',
-        r'Roll No\s*(\d+)'
-    ]
-    for pattern in roll_patterns:
-        match = re.search(pattern, full_text, re.IGNORECASE)
-        if match and match.group(1):
-            result["roll_no"] = match.group(1).strip()
-            break
-    
-    father_patterns = [
-        r"(?i)Father’s / Guardian’s Name\s*[:\-—]?\s*([A-Z\s]+)",
-        r"(?i)Father's/Guardian's Name\s*[:\-—]?\s*([A-Z\s]+)",
-        r"(?i)Father’s \( Guardtan’s Name\s*([A-Z\s]+)"
-    ]
-    for pattern in father_patterns:
-        match = re.search(pattern, full_text)
-        if match and match.group(1):
-            father = re.sub(r'[^A-Z\s]', '', match.group(1)).strip().upper()
-            result["fathers_guardians_name"] = re.sub(r'\s+', ' ', father)
-            break
-    
-    dob_patterns = [
-        r'Date of Birth\s*[:\-]?\s*(\d{2}-\d{2}-\d{4})',
-        r'DOB\s*[:\-]?\s*(\d{2}-\d{2}-\d{4})',
-        r'Birth Date\s*[:\-]?\s*(\d{2}-\d{2}-\d{4})',
-        r'Date of Birth\s*[:\-]?\s*(\d{2}\.\d{2}-\d{4})',
-        r'Date of Birth\s*[:\-]?\s*(\d{2}-[g]\d-\d{4})',
-        r'Date of Birth\s*[:\-]?\s*(\d[g]\.\d{2}-\d{4})',
-        r'Date of Birth\s*[:\-]?\s*(\d{2}\.[g]\d-\d{4})'
-    ]
-    for pattern in dob_patterns:
-        match = re.search(pattern, full_text, re.IGNORECASE)
-        if match and match.group(1):
-            dob = match.group(1).replace('.', '-').replace('g', '0')
-            if dob.startswith('4g') or dob.startswith('40') or dob.startswith('48'):
-                dob = '18' + dob[2:]
-            result["date_of_birth"] = dob
-            break
-    
-    dob_desc_patterns = [
-        r'Date of Birth\s*[:\-]?\s*\d{2}-\d{2}-\d{4}\s*([A-Z0-9\s]+)',
-        r'DOB\s*[:\-]?\s*\d{2}-\d{2}-\d{4}\s*([A-Z0-9\s]+)',
-        r'Date of Birth\s*[:\-]?\s*\d{2}\.\d{2}-\d{4}\s*([A-Z0-9\s]+)',
-        r'Date of Birth\s*[:\-]?\s*(\d{2}-[g]\d-\d{4})\s*([A-Z0-9\s]+)',
-        r'Date of Birth\s*[:\-]?\s*(\d[g]\.\d{2}-\d{4})\s*([A-Z0-9\s]+)',
-        r'Date of Birth\s*[:\-]?\s*(\d{2}\.[g]\d-\d{4})\s*([A-Z0-9\s]+)'
-    ]
-    for pattern in dob_desc_patterns:
-        match = re.search(pattern, full_text, re.IGNORECASE)
-        if match and match.groups()[-1]:
-            dob_desc = re.sub(r'[^A-Z0-9\s]', '', match.groups()[-1]).strip().upper()
-            result["date_of_birth_descriptive"] = re.sub(r'\s+', ' ', dob_desc)
-            break
-    
-    school_patterns = [
-        r"(?i)School\s*[:\-]?\s*_?(\d+\s*-\s*[A-Z\s]+)",
-        r"(?i)Institute\s*[:\-]?\s*_?(\d+\s*-\s*[A-Z\s]+)",
-        r"(?i)Institution\s*[:\-]?\s*_?(\d+\s*-\s*[A-Z\s]+)",
-        r'\. School\s*_?(\d+\s*-\s*[A-Z\s]+)',
-        r'School\s*(\d+\s*-\s*[A-Z\s]+)'
-    ]
-    for pattern in school_patterns:
-        match = re.search(pattern, full_text)
-        if match and match.group(1):
-            school = re.sub(r'[^\dA-Z\s-]', '', match.group(1)).strip().upper()
-            result["school"] = re.sub(r'\s+', ' ', school)
-            break
-    
-    marks_start = None
-    marks_end = None
-    text_lines = text.split('\n')
-    for i, line in enumerate(text_lines):
-        if re.search(r'MARKS|OBTAINED|SUBJECT|SUB\.? CODE|CODE|POSITION|GRADE|SUB|CODE', line, re.IGNORECASE):
-            marks_start = i
-        elif marks_start is not None and (re.search(r'Result|TOTAL|GRAND|PASS', line, re.IGNORECASE) or i > marks_start + 15):
-            marks_end = i
-            break
-    
-    if marks_start is not None and marks_end is not None:
-        marks_section = text_lines[marks_start:marks_end]
-        marks_text = '\n'.join(marks_section)
-        for line in marks_section:
-            match = re.match(r'(\d{3})\s*[ :|—-]*\s*([A-Z\s&.-]+?)\s*[\— :|]*\s*(\d{3})\s*(\d{3})\s*(\d{3})\s*([A-Z\s]+)\s*([A-D][1-9tIlL])', line, re.IGNORECASE)
-            if match:
-                code, subject, theory, practical, total, total_words, grade = match.groups()
-                subject = re.sub(r'[^A-Z\s&.-]', '', subject.upper()).strip()
-                subject = re.sub(r'\s+', ' ', subject)
-                total_words = re.sub(r'[^A-Z\s]', '', total_words.upper()).strip()
-                total_words = re.sub(r'\s+', ' ', total_words)
-                grade = grade.replace('t', '1').replace('I', '1').replace('l', '1').replace('L', '1').upper()
-                
-                subject_mapping = {
-                    'ENGLISH': 'ENGLISH LNG & LIT',
-                    'HINDI': 'HINDI COURSE-B',
-                    'MATHEMATICS': 'MATHEMATICS STANDARD',
-                    'SCIENCE': 'SCIENCE',
-                    'SOCIAL SCIENCE': 'SOCIAL SCIENCE',
-                    'COMPUTER': 'COMPUTER APPLICATIONS'
-                }
-                for key, value in subject_mapping.items():
-                    if key in subject:
-                        subject = value
-                        break
-                
-                result["marks"][subject] = {
-                    "code": code,
-                    "theory": int(theory),
-                    "practical": int(practical),
-                    "total": int(total),
-                    "total_in_words": total_words,
-                    "grade": grade
-                }
-    
-    marks_text = '\n'.join(text_lines[marks_start:marks_end]) if marks_start is not None else full_text
-    subject_patterns = [
-        (r'184.*?(\d{2,3}).*?(\d{2,3}).*?(\d{2,3}).*?([A-Z\s]+).*?([A-D][1-9tIlL])', 'ENGLISH LNG & LIT'),
-        (r'085.*?(\d{2,3}).*?(\d{2,3}).*?(\d{2,3}).*?([A-Z\s]+).*?([A-D][1-9tIlL])', 'HINDI COURSE-B'),
-        (r'041.*?(\d{2,3}).*?(\d{2,3}).*?(\d{2,3}).*?([A-Z\s]+).*?([A-D][1-9tIlL])', 'MATHEMATICS STANDARD'),
-        (r'086.*?(\d{2,3}).*?(\d{2,3}).*?(\d{2,3}).*?([A-Z\s]+).*?([A-D][1-9tIlL])', 'SCIENCE'),
-        (r'087.*?(\d{2,3}).*?(\d{2,3}).*?(\d{2,3}).*?([A-Z\s]+).*?([A-D][1-9tIlL])', 'SOCIAL SCIENCE'),
-        (r'165.*?(\d{2,3}).*?(\d{2,3}).*?(\d{2,3}).*?([A-Z\s]+).*?([A-D][1-9tIlL])', 'COMPUTER APPLICATIONS')
-    ]
-    for pattern, subject_name in subject_patterns:
-        match = re.search(pattern, marks_text, re.IGNORECASE | re.DOTALL)
-        if match and subject_name not in result["marks"]:
-            theory, practical, total, total_words, grade = match.groups()
-            total_words = re.sub(r'[^A-Z\s]', '', total_words.upper()).strip()
-            total_words = re.sub(r'\s+', ' ', total_words)
-            grade = grade.replace('t', '1').replace('I', '1').replace('l', '1').replace('L', '1').upper()
-            result["marks"][subject_name] = {
-                "code": pattern[:3],
-                "theory": int(theory),
-                "practical": int(practical),
-                "total": int(total),
-                "total_in_words": total_words,
-                "grade": grade
-            }
-    
-    if any(value == 'Unknown' for key, value in result.items() if key != 'marks'):
-        lines = text.split('\n')
-        for i, line in enumerate(lines):
-            if 'certify that' in line.lower() or 'certiry that' in line.lower():
-                name_match = re.search(r'(?i)this ts to certiry that\s+([A-Z\s]+)', line)
-                if name_match and name_match.group(1) is not None and result['name'] == 'Unknown':
-                    name = re.sub(r'[^A-Z\s]', '', name_match.group(1)).strip().upper()
-                    result['name'] = re.sub(r'\s+', ' ', name)
-                
-                for j in range(i + 1, min(i + 10, len(lines))):
-                    next_line = lines[j]
-                    roll_match = re.search(r'© Roll No\s*(\d+)', next_line, re.IGNORECASE)
-                    if roll_match and roll_match.group(1) is not None and result['roll_no'] == 'Unknown':
-                        result['roll_no'] = roll_match.group(1)
-                    
-                    father_match = re.search(r"(?i)Father’s \( Guardtan’s Name\s*([A-Z\s]+)", next_line)
-                    if father_match and father_match.group(1) is not None and result['fathers_guardians_name'] == 'Unknown':
-                        father = re.sub(r'[^A-Z\s]', '', father_match.group(1)).strip().upper()
-                        result['fathers_guardians_name'] = re.sub(r'\s+', ' ', father)
-                    
-                    dob_match = re.search(r'© Date of Birth\s*[:\-]?\s*(\d{2}\.\d{2}-\d{4})\s*([A-Z0-9\s]+)', next_line, re.IGNORECASE)
-                    if not dob_match:
-                        dob_match = re.search(r'© Date of Birth\s*[:\-]?\s*(\d[g]\.\d{2}-\d{4})\s*([A-Z0-9\s]+)', next_line, re.IGNORECASE)
-                    if not dob_match:
-                        dob_match = re.search(r'© Date of Birth\s*[:\-]?\s*(\d{2}\.[g]\d-\d{4})\s*([A-Z0-9\s]+)', next_line, re.IGNORECASE)
-                    if dob_match and dob_match.group(1) is not None and result['date_of_birth'] == 'Unknown':
-                        dob = dob_match.group(1).replace('.', '-').replace('g', '0')
-                        if dob.startswith('4g') or dob.startswith('40') or dob.startswith('48'):
-                            dob = '18' + dob[2:]
-                        result["date_of_birth"] = dob
-                        if dob_match.group(2) is not None:
-                            dob_desc = re.sub(r'[^A-Z0-9\s]', '', dob_match.group(2)).strip().upper()
-                            result["date_of_birth_descriptive"] = re.sub(r'\s+', ' ', dob_desc)
-    
-    logging.info(f"Extracted fields: {result}")
-    return result
 
-def normalize_and_hash(fields):
-    normalized = json.dumps(fields, sort_keys=True)
-    return hashlib.sha256(normalized.encode()).hexdigest()
+def normalize_fields(raw_fields: dict) -> dict:
+    """
+    Produce a deterministic, canonical field dict for hashing.
+    - Only CANONICAL_KEYS are included (extras ignored → hash stability)
+    - All values: strip whitespace, collapse internal spaces, UPPERCASE
+    - Missing keys → empty string
+    """
+    normalized = {}
+    for key in CANONICAL_KEYS:
+        val = raw_fields.get(key, "") or ""
+        val = " ".join(str(val).upper().split())  # collapse whitespace + uppercase
+        normalized[key] = val
+    return normalized
 
-def process_upload(file_path, role):
-    if role != 'institution':
-        raise PermissionError
-    fields = extract_fields(file_path)
-    cert_hash = normalize_and_hash(fields)
+
+def normalize_and_hash(fields: dict) -> str:
+    """
+    Canonical dict → deterministic SHA-256 hex string.
+    json.dumps with sort_keys ensures key order never matters.
+    """
+    canonical = normalize_fields(fields)
+    payload = json.dumps(canonical, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+# ── OCR service call ───────────────────────────────────────────────────────────
+
+def extract_fields(file_path: str) -> dict:
+    """
+    Send file to OCR microservice, get back extracted field dict.
+    Falls back to empty dict on failure (so upstream can decide what to do).
+    """
+    try:
+        with open(file_path, "rb") as f:
+            resp = requests.post(
+                f"{OCR_SERVICE_URL}/ocr/fields",
+                files={"file": (os.path.basename(file_path), f)},
+                timeout=OCR_TIMEOUT,
+            )
+        resp.raise_for_status()
+        data = resp.json()
+
+        raw_fields = data.get("fields", {})
+        # Also store raw text for display / debug
+        raw_fields["_raw_text"] = data.get("text", "")
+        raw_fields["_engine"] = data.get("engine", "unknown")
+        raw_fields["_confidence"] = data.get("confidence", 0.0)
+        raw_fields["_pages"] = data.get("pages", 1)
+
+        logger.info(
+            "OCR extracted %d fields via %s (conf=%.2f) for %s",
+            len(raw_fields),
+            raw_fields.get("_engine"),
+            raw_fields.get("_confidence", 0),
+            os.path.basename(file_path),
+        )
+        return raw_fields
+
+    except requests.exceptions.ConnectionError:
+        logger.error("OCR service not reachable at %s — is docuvault-ocr running?", OCR_SERVICE_URL)
+        raise RuntimeError(
+            "OCR service is offline. Run: sudo systemctl start docuvault-ocr"
+        )
+    except requests.exceptions.Timeout:
+        logger.error("OCR service timed out after %ds", OCR_TIMEOUT)
+        raise RuntimeError("OCR service timed out — document may be too large.")
+    except Exception as exc:
+        logger.error("OCR extract_fields error: %s", exc)
+        raise
+
+
+# ── Upload pipeline ────────────────────────────────────────────────────────────
+
+def process_upload(file_path: str, issuer: str) -> tuple:
+    """
+    Full upload pipeline:
+      1. OCR → field dict
+      2. Normalize + hash → cert_hash
+      3. Write block to blockchain (hash + ZKP)
+      4. Return (cert_hash, normalized_fields, raw_fields)
+
+    Raises on OCR failure, PermissionError if role wrong, etc.
+    """
+    raw_fields = extract_fields(file_path)
+    norm_fields = normalize_fields(raw_fields)
+    cert_hash = normalize_and_hash(raw_fields)
+
+    # ZKP commitment
+    from .zkp import generate_zkp_proof, proof_to_hex
+    proof = generate_zkp_proof(cert_hash)
+    proof_hex = proof_to_hex(proof)
+
+    # Write to blockchain
     from .blockchain import blockchain
-    blockchain.add_block(cert_hash)
+    block_index = blockchain.add_document_block(
+        cert_hash=cert_hash,
+        zkp_proof=proof_hex,
+        issuer=issuer,
+        fields_summary={k: v for k, v in norm_fields.items() if v},  # non-empty only
+    )
+
+    return cert_hash, norm_fields, raw_fields, block_index
+
+
+def verify_upload(file_path: str) -> tuple:
+    """
+    Full verify pipeline:
+      1. OCR → field dict
+      2. Normalize + hash
+      3. Blockchain lookup
+      4. ZKP re-verification
+      5. Return (is_valid, cert_hash, block_data, norm_fields)
+    """
+    raw_fields = extract_fields(file_path)
+    cert_hash = normalize_and_hash(raw_fields)
+    norm_fields = normalize_fields(raw_fields)
+
+    from .blockchain import blockchain
+    block_data = blockchain.find_block_by_hash(cert_hash)
+
+    if not block_data:
+        return False, cert_hash, None, norm_fields
+
+    # Re-verify ZKP
+    from .zkp import generate_zkp_proof, proof_to_hex
+    try:
+        stored_proof = block_data.get("zkp_proof", "")
+        recomputed_proof = proof_to_hex(generate_zkp_proof(cert_hash))
+        zkp_valid = recomputed_proof == stored_proof
+    except Exception as e:
+        logger.warning("ZKP re-verification error: %s", e)
+        zkp_valid = False
+
+    is_valid = bool(block_data) and zkp_valid
+    return is_valid, cert_hash, block_data, norm_fields
+
+
+# ── Legacy compat (kept so nothing breaks) ────────────────────────────────────
+
+# Old callers that only got (cert_hash,) or (is_valid, cert_hash) still work:
+def _process_upload_compat(file_path: str, issuer: str) -> str:
+    cert_hash, *_ = process_upload(file_path, issuer)
     return cert_hash
 
-def verify_upload(file_path):
-    fields = extract_fields(file_path)
-    cert_hash = normalize_and_hash(fields)
-    from .blockchain import blockchain
-    return blockchain.is_valid_hash(cert_hash), cert_hash
+
+def _verify_upload_compat(file_path: str) -> tuple:
+    is_valid, cert_hash, *_ = verify_upload(file_path)
+    return is_valid, cert_hash
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python app/ocr.py <path_to_marksheet>")
+        print("Usage: python -m app.ocr <path_to_document>")
         sys.exit(1)
-    file_path = sys.argv[1]
-    extracted_details = extract_fields(file_path)
-    print("Extracted fields:", json.dumps(extracted_details, indent=2))
+    fp = sys.argv[1]
+    raw = extract_fields(fp)
+    norm = normalize_fields(raw)
+    h = normalize_and_hash(raw)
+    print("Raw fields:", json.dumps({k: v for k, v in raw.items() if not k.startswith("_")}, indent=2))
+    print("Normalized:", json.dumps(norm, indent=2))
+    print("SHA-256 hash:", h)
