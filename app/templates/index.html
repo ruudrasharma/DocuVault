@@ -340,9 +340,9 @@
 
     <!-- Wallet Sub-Tabs -->
     <div style="display:flex;gap:10px;margin-bottom:20px;max-width:900px">
-      <button class="btn-action btn-cyan citizen-only" id="wtab-docs" onclick="switchWalletTab('docs')" style="flex:1">My Documents</button>
-      <button class="btn-action citizen-only" id="wtab-grants" onclick="switchWalletTab('grants')" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)">Issued Grants</button>
-      <button class="btn-action verifier-only" id="wtab-received" onclick="switchWalletTab('received')" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)">Received Documents</button>
+      <button class="btn-action btn-cyan" id="wtab-docs" onclick="switchWalletTab('docs')" style="flex:1">My Documents</button>
+      <button class="btn-action" id="wtab-grants" onclick="switchWalletTab('grants')" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)">Issued Grants</button>
+      <button class="btn-action" id="wtab-received" onclick="switchWalletTab('received')" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)">Received Documents</button>
     </div>
 
     <!-- Tab 1: My Documents -->
@@ -638,10 +638,10 @@ async function initDashboard() {
       el.style.display = (role==='institution'||role==='admin') ? '' : 'none';
     });
     document.querySelectorAll('.citizen-only').forEach(el=>{
-      el.style.display = (role==='citizen'||role==='admin') ? '' : 'none';
+      el.style.display = (role==='citizen'||role==='verifier'||role==='admin') ? '' : 'none';
     });
     document.querySelectorAll('.verifier-only').forEach(el=>{
-      el.style.display = (role==='verifier'||role==='admin') ? '' : 'none';
+      el.style.display = (role==='verifier'||role==='citizen'||role==='admin') ? '' : 'none';
     });
 
     if(role==='citizen') {

@@ -22,7 +22,7 @@ wallet_bp = Blueprint('wallet', __name__)
 
 @wallet_bp.route('/wallet/setup', methods=['POST'])
 @login_required
-@role_required('citizen')
+@role_required('citizen', 'verifier', 'admin')
 def setup_wallet():
     """Provision wallet keypair for citizen if not yet established."""
     try:
@@ -50,7 +50,7 @@ def setup_wallet():
 
 @wallet_bp.route('/wallet/my-documents', methods=['GET'])
 @login_required
-@role_required('citizen')
+@role_required('citizen', 'verifier', 'admin')
 def my_documents():
     """Return list of metadata for documents owned by current citizen."""
     try:
@@ -119,7 +119,7 @@ def upload_to_wallet():
 
 @wallet_bp.route('/wallet/share', methods=['POST'])
 @login_required
-@role_required('citizen')
+@role_required('citizen', 'verifier', 'admin')
 def share_document():
     """Citizen grants temporary access to a grantee agency/verifier."""
     data = request.get_json(silent=True) or {}
@@ -172,7 +172,7 @@ def share_document():
 
 @wallet_bp.route('/wallet/revoke', methods=['POST'])
 @login_required
-@role_required('citizen')
+@role_required('citizen', 'verifier', 'admin')
 def revoke_grant():
     """Citizen revokes a previously issued access grant."""
     data = request.get_json(silent=True) or {}
@@ -202,7 +202,7 @@ def revoke_grant():
 
 @wallet_bp.route('/wallet/my-grants', methods=['GET'])
 @login_required
-@role_required('citizen')
+@role_required('citizen', 'verifier', 'admin')
 def my_grants():
     """List all access grants issued by the current citizen with computed status."""
     try:
@@ -245,7 +245,7 @@ def my_grants():
 
 @wallet_bp.route('/wallet/received', methods=['GET'])
 @login_required
-@role_required('verifier', 'admin')
+@role_required('verifier', 'citizen', 'admin')
 def received_documents():
     """Verifier/agency lists non-expired, non-revoked documents shared to them."""
     try:
@@ -394,7 +394,7 @@ def audit_trail(document_id):
 
 @wallet_bp.route('/wallet/prove-claim', methods=['POST'])
 @login_required
-@role_required('citizen')
+@role_required('citizen', 'verifier', 'admin')
 def prove_claim():
     """
     Generate a zero-knowledge proof token for a document predicate (e.g. proof of degree ownership).

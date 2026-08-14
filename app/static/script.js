@@ -722,13 +722,11 @@ async function initializeDashboard() {
 // ── Citizen Wallet Engine ───────────────────────────────────
 function switchWalletTab(tab) {
   const role = state.currentRole || window._currentRole || '';
+  const allowed = (role === 'citizen' || role === 'verifier' || role === 'admin');
+
   ['docs', 'grants', 'received'].forEach(t => {
     const el = document.getElementById(`wallet-${t}-tab`);
     const btn = document.getElementById(`wtab-${t}`);
-    
-    // Determine if button is allowed for role
-    const allowed = (t === 'received' && (role === 'verifier' || role === 'admin')) ||
-                    ((t === 'docs' || t === 'grants') && (role === 'citizen' || role === 'admin'));
 
     if (btn) {
       btn.style.display = allowed ? 'block' : 'none';
@@ -742,9 +740,9 @@ function switchWalletTab(tab) {
     if (el) el.style.display = (t === tab && allowed) ? 'block' : 'none';
   });
 
-  if (tab === 'docs' && (role === 'citizen' || role === 'admin')) loadMyDocuments();
-  if (tab === 'grants' && (role === 'citizen' || role === 'admin')) loadMyGrants();
-  if (tab === 'received' && (role === 'verifier' || role === 'admin')) loadReceivedDocuments();
+  if (tab === 'docs') loadMyDocuments();
+  if (tab === 'grants') loadMyGrants();
+  if (tab === 'received') loadReceivedDocuments();
 }
 
 async function loadMyDocuments() {
