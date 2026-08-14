@@ -62,18 +62,21 @@ def login():
         return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
-        password = request.form.get('password', '')
+        password = request.form.get('password', '').strip()
         logger.info(f'Login attempt: username={username!r}')
-        user = User.query.filter_by(username=username).first()
+        
+        # Case-insensitive username lookup
+        user = User.query.filter(db.func.lower(User.username) == username.lower()).first()
         if not user:
             logger.warning(f'Login failed: user {username!r} not found')
-            flash('Invalid credentials', 'error')
-        elif user.oauth_provider != 'local':
-            logger.warning(f'Login failed: {username!r} is oauth_provider={user.oauth_provider!r}, not local')
-            flash('This account uses Google Sign-In. Use the Google button below.', 'error')
+            flash('Invalid credentials — account not found', 'error')
         elif not user.check_password(password):
-            logger.warning(f'Login failed: wrong password for {username!r}')
-            flash('Invalid credentials — wrong password', 'error')
+            if user.oauth_provider != 'local' and not user.password_hash:
+                logger.warning(f'Login failed: {username!r} is Google account with no password set')
+                flash('This account uses Google Sign-In. Click "Continue with Google" below.', 'error')
+            else:
+                logger.warning(f'Login failed: wrong password for {username!r}')
+                flash('Invalid credentials — incorrect password', 'error')
         else:
             session['user_id'] = user.id
             session['role'] = user.role
