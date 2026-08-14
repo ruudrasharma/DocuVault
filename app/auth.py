@@ -24,6 +24,8 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
+            if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                return jsonify({'error': 'Authentication required. Please log in.'}), 401
             return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return decorated
@@ -33,6 +35,8 @@ def role_required(*roles):
         @wraps(f)
         def decorated(*args, **kwargs):
             if session.get('role') not in roles:
+                if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                    return jsonify({'error': f'Access restricted. Required role: {", ".join(roles)}'}), 403
                 flash('Insufficient permissions', 'error')
                 return redirect(url_for('auth.login'))
             return f(*args, **kwargs)

@@ -721,19 +721,30 @@ async function initializeDashboard() {
 
 // ── Citizen Wallet Engine ───────────────────────────────────
 function switchWalletTab(tab) {
+  const role = state.currentRole || window._currentRole || '';
   ['docs', 'grants', 'received'].forEach(t => {
     const el = document.getElementById(`wallet-${t}-tab`);
     const btn = document.getElementById(`wtab-${t}`);
-    if (el) el.style.display = t === tab ? 'block' : 'none';
+    
+    // Determine if button is allowed for role
+    const allowed = (t === 'received' && (role === 'verifier' || role === 'admin')) ||
+                    ((t === 'docs' || t === 'grants') && (role === 'citizen' || role === 'admin'));
+
     if (btn) {
-      btn.className = t === tab ? 'btn-action btn-cyan' : 'btn-action';
-      btn.style.cssText = t === tab ? 'flex:1' : 'flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)';
+      btn.style.display = allowed ? 'block' : 'none';
+      if (allowed) {
+        btn.className = t === tab ? 'btn-action btn-cyan' : 'btn-action';
+        btn.style.background = t === tab ? '' : 'transparent';
+        btn.style.borderColor = t === tab ? '' : 'var(--border)';
+        btn.style.color = t === tab ? '' : 'var(--text-muted)';
+      }
     }
+    if (el) el.style.display = (t === tab && allowed) ? 'block' : 'none';
   });
 
-  if (tab === 'docs') loadMyDocuments();
-  if (tab === 'grants') loadMyGrants();
-  if (tab === 'received') loadReceivedDocuments();
+  if (tab === 'docs' && (role === 'citizen' || role === 'admin')) loadMyDocuments();
+  if (tab === 'grants' && (role === 'citizen' || role === 'admin')) loadMyGrants();
+  if (tab === 'received' && (role === 'verifier' || role === 'admin')) loadReceivedDocuments();
 }
 
 async function loadMyDocuments() {
@@ -743,7 +754,13 @@ async function loadMyDocuments() {
 
   try {
     const res = await fetch('/wallet/my-documents');
-    const docs = await res.json();
+    const docs = await res.json().catch(() => null);
+
+    if (!res.ok || !Array.isArray(docs)) {
+      const msg = (docs && docs.error) ? docs.error : `Access restricted (${res.status})`;
+      el.innerHTML = `<div class="flash-msg flash-error">${msg}</div>`;
+      return;
+    }
 
     if (!docs.length) {
       el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">No documents in your wallet yet. Ask an institution to issue documents to your username.</div>';
@@ -824,7 +841,7 @@ async function submitShareDocument() {
         password: password
       })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) {
       errEl.textContent = data.error || 'Failed to grant access.';
       errEl.style.display = 'block';
@@ -849,7 +866,13 @@ async function loadMyGrants() {
 
   try {
     const res = await fetch('/wallet/my-grants');
-    const grants = await res.json();
+    const grants = await res.json().catch(() => null);
+
+    if (!res.ok || !Array.isArray(grants)) {
+      const msg = (grants && grants.error) ? grants.error : `Access restricted (${res.status})`;
+      el.innerHTML = `<div class="flash-msg flash-error">${msg}</div>`;
+      return;
+    }
 
     if (!grants.length) {
       el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">No access grants issued yet.</div>';
@@ -885,7 +908,7 @@ async function revokeGrant(grantId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grant_id: grantId })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (data.success) {
       Toast.success(`Grant revoked on Block #${data.block_index}`);
       loadMyGrants();
@@ -904,7 +927,13 @@ async function loadReceivedDocuments() {
 
   try {
     const res = await fetch('/wallet/received');
-    const docs = await res.json();
+    const docs = await res.json().catch(() => null);
+
+    if (!res.ok || !Array.isArray(docs)) {
+      const msg = (docs && docs.error) ? docs.error : `Access restricted (${res.status})`;
+      el.innerHTML = `<div class="flash-msg flash-error">${msg}</div>`;
+      return;
+    }
 
     if (!docs.length) {
       el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">No active document grants shared with you.</div>';
