@@ -126,10 +126,8 @@ def share_document():
     doc_id = data.get('document_id')
     grantee_username = data.get('grantee_username', '').strip()
     expires_at_str = data.get('expires_at')
-    password = data.get('password')
-    
-    if not doc_id or not grantee_username or not expires_at_str or not password:
-        return jsonify({'error': 'document_id, grantee_username, expires_at, and password are required.'}), 400
+    if not doc_id or not grantee_username or not expires_at_str:
+        return jsonify({'error': 'document_id, grantee_username, and expires_at are required.'}), 400
         
     doc = db.session.get(Document, doc_id)
     if not doc:
@@ -310,27 +308,14 @@ def fetch_document(document_id):
     
     try:
         if current_user.id == doc.owner_id:
-            if not password:
-                return jsonify({'error': 'Owner password required to decrypt document.'}), 400
-            owner_wk = WalletKey.query.filter_by(user_id=doc.owner_id).first()
-            if not owner_wk:
-                return jsonify({'error': 'Wallet key not found.'}), 404
-            priv_pem = wallet.decrypt_private_key(owner_wk.encrypted_private_key, owner_wk.kdf_salt, password)
+            priv_pem = consent.get_user_private_key(current_user, password)
             dek = wallet.unwrap_dek(doc.wrapped_dek_owner, priv_pem)
         else:
             # Grantee access
             grant = AccessGrant.query.filter_by(document_id=doc.id, grantee_id=current_user.id, revoked=False).first()
             if not grant:
-                return jsonify({'error': 'No grant record found.'}), 403
-            grantee_wk = WalletKey.query.filter_by(user_id=current_user.id).first()
-            if not grantee_wk:
-                return jsonify({'error': 'Grantee wallet key missing.'}), 404
-            # If grantee provided password, use it to decrypt private key; otherwise try default/cached
-            g_pwd = password or "DefaultWalletPass123!"
-            try:
-                priv_pem = wallet.decrypt_private_key(grantee_wk.encrypted_private_key, grantee_wk.kdf_salt, g_pwd)
-            except ValueError:
-                return jsonify({'error': 'Grantee password required or invalid.'}), 403
+                return jsonify({'error': 'No grant record found for this document.'}), 403
+            priv_pem = consent.get_user_private_key(current_user, password)
             dek = wallet.unwrap_dek(grant.wrapped_dek_grantee, priv_pem)
             
         file_bytes = documents.decrypt_blob(doc.encrypted_blob_path, doc.iv, dek)

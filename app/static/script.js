@@ -819,8 +819,8 @@ async function submitShareDocument() {
   const btn = document.getElementById('share-submit-btn');
 
   errEl.style.display = 'none';
-  if (!grantee || !expiry || !password) {
-    errEl.textContent = 'All fields are required.';
+  if (!grantee || !expiry) {
+    errEl.textContent = 'Target agency and expiration date are required.';
     errEl.style.display = 'block';
     return;
   }

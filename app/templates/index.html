@@ -419,9 +419,9 @@
           <input type="datetime-local" id="share-expiry" class="form-input">
         </div>
         <div>
-          <label class="form-label">Your Wallet Password (Transaction Sign)</label>
-          <input type="password" id="share-password" class="form-input" placeholder="Re-enter account password">
-          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">Required to decrypt private key &amp; re-wrap DEK for grantee.</div>
+          <label class="form-label">Wallet Password (Optional for Google SSO)</label>
+          <input type="password" id="share-password" class="form-input" placeholder="Account password (leave blank for Google SSO)">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">Decrypts private key &amp; re-wraps DEK for grantee.</div>
         </div>
 
         <div id="share-err" class="flash-msg flash-error" style="display:none"></div>
