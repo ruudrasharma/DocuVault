@@ -144,6 +144,30 @@ class Blockchain:
         }
         return self._add_raw(json.dumps(payload, sort_keys=True))
 
+    def add_wallet_issue_block(self, cert_hash: str, owner_username: str, issuer_username: str) -> int:
+        payload = {"type": "wallet_issue", "cert_hash": cert_hash,
+                   "owner": owner_username, "issuer": issuer_username, "ts": time()}
+        return self._add_raw(json.dumps(payload, sort_keys=True))
+
+    def add_grant_block(self, cert_hash: str, owner_username: str, grantee_username: str, expires_at_ts: float) -> int:
+        payload = {"type": "grant", "cert_hash": cert_hash, "owner": owner_username,
+                   "grantee": grantee_username, "expires_at": expires_at_ts, "ts": time()}
+        return self._add_raw(json.dumps(payload, sort_keys=True))
+
+    def add_revoke_block(self, cert_hash: str, owner_username: str, grantee_username: str) -> int:
+        payload = {"type": "revoke", "cert_hash": cert_hash, "owner": owner_username,
+                   "grantee": grantee_username, "ts": time()}
+        return self._add_raw(json.dumps(payload, sort_keys=True))
+
+    def get_events_for_hash(self, cert_hash: str) -> list[dict]:
+        """All grant/revoke/issue events for this doc, in chain order — this IS the access-control read path."""
+        out = []
+        for block in self.chain[1:]:
+            pd = block.parsed_data
+            if pd and pd.get("cert_hash") == cert_hash and pd.get("type") in ("wallet_issue", "grant", "revoke"):
+                out.append({**pd, "_block_index": block.index})
+        return out
+
     # Legacy: old callers that pass a bare hash string
     def add_block(self, data):
         return self._add_raw(data)
@@ -180,6 +204,8 @@ class Blockchain:
         for block in self.chain[1:]:  # skip genesis
             pd = block.parsed_data
             if pd and "cert_hash" in pd:
+                if pd.get("type") in ("wallet_issue", "grant", "revoke"):
+                    continue
                 results.append({
                     **pd,
                     "_block_index": block.index,

@@ -32,7 +32,7 @@ def index():
 
 @main_bp.route('/dashboard/<role>')
 @login_required
-@role_required('admin', 'institution', 'verifier')
+@role_required('admin', 'institution', 'verifier', 'citizen')
 def dashboard(role):
     return render_template('index.html')
 

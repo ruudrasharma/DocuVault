@@ -216,8 +216,8 @@ def admin_init_account():
     password = data.get('password', '')
     role = data.get('role', '')
 
-    if not username or not password or role not in ('admin', 'institution'):
-        return jsonify({'error': 'Invalid input. Role must be admin or institution.'}), 400
+    if not username or not password or role not in ('admin', 'institution', 'citizen'):
+        return jsonify({'error': 'Invalid input. Role must be admin, institution, or citizen.'}), 400
     if len(password) < 8:
         return jsonify({'error': 'Password must be at least 8 characters.'}), 400
     if User.query.filter_by(username=username).first():

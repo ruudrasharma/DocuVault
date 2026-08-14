@@ -51,9 +51,13 @@ google_oauth = oauth.register(
 # Import blueprints
 from .main import main_bp
 from .auth import auth_bp
+from .routes_wallet import wallet_bp
+from .routes_citizen import citizen_bp
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(wallet_bp)
+app.register_blueprint(citizen_bp)
 
 # Import models and initialize database
 with app.app_context():

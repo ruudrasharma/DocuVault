@@ -1230,3 +1230,21 @@ body {
   background: #FFFFFF;
   box-shadow: 0 24px 60px rgba(15,23,42,0.12);
 }
+
+/* ── Citizen Wallet Styling ──────────────────────────────────── */
+.role-citizen {
+  background: rgba(124,58,237,0.1);
+  color: var(--magenta);
+  border: 1px solid rgba(124,58,237,0.25);
+}
+
+.wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+#share-modal-overlay, #audit-modal-overlay {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

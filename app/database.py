@@ -78,6 +78,42 @@ class PendingAccount(db.Model):
         return totp.verify(token, valid_window=2)
 
 
+class Document(db.Model):
+    __tablename__ = 'document'
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    issuer_username = db.Column(db.String(120), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    doc_type = db.Column(db.String(100), nullable=True)
+    encrypted_blob_path = db.Column(db.String(500), nullable=False)   # path under data/wallet_blobs/
+    iv = db.Column(db.String(64), nullable=False)                    # AES-GCM nonce, hex
+    wrapped_dek_owner = db.Column(db.Text, nullable=False)           # DEK encrypted to owner pubkey, b64
+    cert_hash = db.Column(db.String(64), nullable=False)             # sha256(encrypted_blob)
+    block_index = db.Column(db.Integer, nullable=False)              # issuance block on chain
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+class AccessGrant(db.Model):
+    __tablename__ = 'access_grant'
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
+    grantee_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    wrapped_dek_grantee = db.Column(db.Text, nullable=False)         # DEK encrypted to grantee pubkey, b64
+    granted_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    granted_block_index = db.Column(db.Integer, nullable=False)      # 'grant' block on chain
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked = db.Column(db.Boolean, default=False)
+    revoked_block_index = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+class WalletKey(db.Model):
+    __tablename__ = 'wallet_key'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    public_key_pem = db.Column(db.Text, nullable=False)
+    encrypted_private_key = db.Column(db.Text, nullable=False)  # private key encrypted w/ password-derived key
+    kdf_salt = db.Column(db.String(64), nullable=False)
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))

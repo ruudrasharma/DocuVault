@@ -719,6 +719,272 @@ async function initializeDashboard() {
   selectVerifyMode('digital');
 }
 
+// ── Citizen Wallet Engine ───────────────────────────────────
+function switchWalletTab(tab) {
+  ['docs', 'grants', 'received'].forEach(t => {
+    const el = document.getElementById(`wallet-${t}-tab`);
+    const btn = document.getElementById(`wtab-${t}`);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.className = t === tab ? 'btn-action btn-cyan' : 'btn-action';
+      btn.style.cssText = t === tab ? 'flex:1' : 'flex:1;background:transparent;border:1px solid var(--border);color:var(--text-muted)';
+    }
+  });
+
+  if (tab === 'docs') loadMyDocuments();
+  if (tab === 'grants') loadMyGrants();
+  if (tab === 'received') loadReceivedDocuments();
+}
+
+async function loadMyDocuments() {
+  const el = document.getElementById('wallet-docs-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);font-family:var(--font-mono);font-size:12px">Loading wallet documents<span class="typing-cursor"></span></div>';
+
+  try {
+    const res = await fetch('/wallet/my-documents');
+    const docs = await res.json();
+
+    if (!docs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">No documents in your wallet yet. Ask an institution to issue documents to your username.</div>';
+      return;
+    }
+
+    el.innerHTML = docs.map(d => `
+      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:var(--r-md);padding:18px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text-primary)">${d.original_filename}</div>
+            <div style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);margin-top:2px">${d.doc_type} · Issued by ${d.issuer_username}</div>
+          </div>
+          <span class="badge badge-verified" style="font-size:10px">AES-256-GCM</span>
+        </div>
+
+        <div style="background:rgba(0,0,0,0.2);border-radius:var(--r-sm);padding:8px 12px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">
+          <div>HASH: ${(d.cert_hash || '').substring(0, 24)}…</div>
+          <div style="margin-top:2px">BLOCK #${d.block_index} · ${d.created_at}</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+          <button onclick="openShareModal(${d.id})" class="btn-action btn-cyan" style="font-size:11px;padding:6px 12px">⟶ Share</button>
+          <button onclick="downloadWalletDoc(${d.id})" class="btn-action" style="font-size:11px;padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border)">⬇ Download</button>
+          <button onclick="loadAuditTrail(${d.id})" class="btn-action" style="font-size:11px;padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border)">📜 Audit Trail</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    el.innerHTML = `<div class="flash-msg flash-error">Failed to load wallet documents: ${err.message}</div>`;
+  }
+}
+
+function openShareModal(docId) {
+  document.getElementById('share-doc-id').value = docId;
+  document.getElementById('share-grantee').value = '';
+  document.getElementById('share-password').value = '';
+  document.getElementById('share-err').style.display = 'none';
+
+  // Set default expiry to tomorrow
+  const tmr = new Date(Date.now() + 24 * 3600 * 1000);
+  const isoStr = tmr.toISOString().slice(0, 16);
+  document.getElementById('share-expiry').value = isoStr;
+
+  document.getElementById('share-modal-overlay').style.display = 'block';
+}
+
+function closeShareModal() {
+  document.getElementById('share-modal-overlay').style.display = 'none';
+}
+
+async function submitShareDocument() {
+  const docId = document.getElementById('share-doc-id').value;
+  const grantee = document.getElementById('share-grantee').value.trim();
+  const expiry = document.getElementById('share-expiry').value;
+  const password = document.getElementById('share-password').value;
+  const errEl = document.getElementById('share-err');
+  const btn = document.getElementById('share-submit-btn');
+
+  errEl.style.display = 'none';
+  if (!grantee || !expiry || !password) {
+    errEl.textContent = 'All fields are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '▶ SIGNING & GRANTING...';
+
+  try {
+    const res = await fetch('/wallet/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_id: parseInt(docId),
+        grantee_username: grantee,
+        expires_at: new Date(expiry).toISOString(),
+        password: password
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      errEl.textContent = data.error || 'Failed to grant access.';
+      errEl.style.display = 'block';
+    } else {
+      Toast.success(`Consent grant written to Block #${data.block_index}`);
+      closeShareModal();
+      switchWalletTab('grants');
+    }
+  } catch (e) {
+    errEl.textContent = 'Network error.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟶ SIGN & GRANT CONSENT ON CHAIN';
+  }
+}
+
+async function loadMyGrants() {
+  const el = document.getElementById('wallet-grants-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);font-family:var(--font-mono);font-size:12px">Loading grants<span class="typing-cursor"></span></div>';
+
+  try {
+    const res = await fetch('/wallet/my-grants');
+    const grants = await res.json();
+
+    if (!grants.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">No access grants issued yet.</div>';
+      return;
+    }
+
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+      <thead><tr>${['Grant ID', 'Document', 'Grantee', 'Expires', 'Status', 'Action'].map(h => `<th style="padding:12px 16px;text-align:left;font-size:10px;font-family:var(--font-mono);color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+      <tbody>${grants.map(g => `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+          <td style="padding:12px 16px;font-size:11px;font-family:var(--font-mono);color:var(--cyan)">#${g.grant_id}</td>
+          <td style="padding:12px 16px;font-size:12px;color:var(--text-primary)">${g.original_filename}</td>
+          <td style="padding:12px 16px;font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">${g.grantee_username}</td>
+          <td style="padding:12px 16px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${g.expires_at}</td>
+          <td style="padding:12px 16px">
+            <span class="badge ${g.status === 'active' ? 'badge-verified' : 'badge-rejected'}" style="font-size:10px;text-transform:uppercase">${g.status}</span>
+          </td>
+          <td style="padding:12px 16px">
+            ${g.status === 'active' ? `<button onclick="revokeGrant(${g.grant_id})" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#F87171;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;font-family:var(--font-mono)">REVOKE</button>` : '<span style="font-size:11px;color:var(--text-muted)">—</span>'}
+          </td>
+        </tr>
+      `).join('')}</tbody></table>`;
+  } catch (err) {
+    el.innerHTML = `<div class="flash-msg flash-error">Failed to load grants: ${err.message}</div>`;
+  }
+}
+
+async function revokeGrant(grantId) {
+  if (!confirm('Revoke access grant? The grantee will immediately lose decryption ability on-chain.')) return;
+  try {
+    const res = await fetch('/wallet/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grant_id: grantId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      Toast.success(`Grant revoked on Block #${data.block_index}`);
+      loadMyGrants();
+    } else {
+      Toast.error(data.error || 'Revocation failed.');
+    }
+  } catch (err) {
+    Toast.error('Network error during revocation.');
+  }
+}
+
+async function loadReceivedDocuments() {
+  const el = document.getElementById('wallet-received-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);font-family:var(--font-mono);font-size:12px">Loading received documents<span class="typing-cursor"></span></div>';
+
+  try {
+    const res = await fetch('/wallet/received');
+    const docs = await res.json();
+
+    if (!docs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:var(--font-mono);font-size:13px">No active document grants shared with you.</div>';
+      return;
+    }
+
+    el.innerHTML = docs.map(d => `
+      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:var(--r-md);padding:18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary)">${d.original_filename}</div>
+          <div style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);margin-top:2px">Owner: ${d.owner_username} · Issued by ${d.issuer_username}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">Expires: ${d.expires_at} · Hash: ${(d.cert_hash || '').substring(0, 16)}…</div>
+        </div>
+        <button onclick="downloadWalletDoc(${d.document_id})" class="btn-action btn-green" style="font-size:11px;padding:8px 16px">⬇ Download &amp; Decrypt</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    el.innerHTML = `<div class="flash-msg flash-error">Failed to load received documents: ${err.message}</div>`;
+  }
+}
+
+async function downloadWalletDoc(docId) {
+  let pwd = '';
+  if (state.currentRole === 'citizen') {
+    pwd = prompt('Enter your wallet password to decrypt document:');
+    if (!pwd) return;
+  }
+  const url = `/wallet/fetch/${docId}${pwd ? '?password=' + encodeURIComponent(pwd) : ''}`;
+  window.open(url, '_blank');
+}
+
+async function loadAuditTrail(docId) {
+  const overlay = document.getElementById('audit-modal-overlay');
+  const content = document.getElementById('audit-content');
+  overlay.style.display = 'block';
+  content.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);font-family:var(--font-mono);font-size:12px">Querying blockchain audit trail<span class="typing-cursor"></span></div>';
+
+  try {
+    const res = await fetch(`/wallet/audit/${docId}`);
+    const data = await res.json();
+    if (data.error) {
+      content.innerHTML = `<div class="flash-msg flash-error">${data.error}</div>`;
+      return;
+    }
+
+    const typeColors = { wallet_issue: 'var(--cyan)', grant: 'var(--green)', revoke: '#F87171' };
+
+    content.innerHTML = `
+      <div style="margin-bottom:16px;background:rgba(0,0,0,0.2);padding:12px;border-radius:6px;font-family:var(--font-mono);font-size:11px">
+        <div><strong>FILE:</strong> ${data.original_filename}</div>
+        <div style="margin-top:4px;word-break:break-all;color:var(--text-muted)"><strong>HASH:</strong> ${data.cert_hash}</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${data.events.map(e => `
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:3px solid ${typeColors[e.type] || 'var(--border)'}">
+            <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:${typeColors[e.type] || 'var(--text-primary)'};text-transform:uppercase;min-width:90px">
+              ${e.type}
+            </div>
+            <div style="flex:1;font-size:12px;font-family:var(--font-mono)">
+              <div style="color:var(--text-primary)">Block #${e.block_index} · ${e.timestamp}</div>
+              <div style="color:var(--text-muted);margin-top:2px">
+                ${e.type === 'wallet_issue' ? `Issued by ${e.issuer} to ${e.owner}` : ''}
+                ${e.type === 'grant' ? `Granted by ${e.owner} to ${e.grantee} (Expires: ${e.expires_at})` : ''}
+                ${e.type === 'revoke' ? `Revoked access for ${e.grantee}` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = `<div class="flash-msg flash-error">Error loading audit trail.</div>`;
+  }
+}
+
+function closeAuditModal() {
+  document.getElementById('audit-modal-overlay').style.display = 'none';
+}
+
 function showSectionsForRole(role) {
   const uploadTab   = document.querySelector('[data-tab="upload"]');
   const adminTab    = document.querySelector('[data-tab="admin"]');
