@@ -851,6 +851,51 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
         <span style="color:${accent||'var(--text-primary)'};text-align:right;word-break:break-all">${val}</span>
        </div>`;
 
+    const renderAiCard = (data) => {
+      const isAnomaly = data.anomaly_detected || data.ela_tampered || (data.anomaly_analysis && data.anomaly_analysis.is_anomaly);
+      const elaTampered = data.ela_tampered || (data.anomaly_analysis && data.anomaly_analysis.ela_tampered);
+      const elaRatio = data.anomaly_analysis?.ela_pixel_ratio || 0.0;
+      const score = data.anomaly_score !== undefined ? data.anomaly_score : (data.anomaly_analysis?.anomaly_score || 0.0);
+      const textAnomaly = data.anomaly_analysis?.text_anomaly || false;
+      const imageAnomaly = data.anomaly_analysis?.image_anomaly || false;
+      const aeAnomaly = data.anomaly_analysis?.autoencoder_anomaly || false;
+      const aeLoss = data.anomaly_analysis?.autoencoder_loss || 0.0;
+
+      return `
+        <div style="margin-top:12px;padding:12px;border-radius:8px;background:${isAnomaly ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.10)'};border:1px solid ${isAnomaly ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.30)'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:${isAnomaly ? '#F87171' : 'var(--green)'};display:flex;align-items:center;gap:6px">
+              <span style="font-size:14px">🤖</span> AI ANOMALY & ELA TAMPER ANALYSIS
+            </div>
+            <span style="font-size:10px;padding:3px 8px;border-radius:12px;background:${isAnomaly ? '#EF4444' : '#10B981'};color:#fff;font-weight:700;font-family:var(--font-mono)">
+              ${isAnomaly ? '⚠️ TAMPER RISK DETECTED' : '✓ AI VERIFIED CLEAN'}
+            </span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:10px;font-family:var(--font-mono)">
+            <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+              <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">ELA PIXEL TAMPER</div>
+              <div style="color:${elaTampered ? '#F87171' : 'var(--green)'};font-weight:700">
+                ${elaTampered ? '⚠️ Spliced/Edited' : '✓ Untampered'} (${(elaRatio * 100).toFixed(1)}%)
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+              <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">ISOLATION FOREST</div>
+              <div style="color:${textAnomaly || imageAnomaly ? '#F87171' : 'var(--green)'};font-weight:700">
+                ${textAnomaly || imageAnomaly ? '⚠️ Outlier' : '✓ Inlier'} (${score.toFixed(2)})
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+              <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">AUTOENCODER FL</div>
+              <div style="color:${aeAnomaly ? '#F87171' : 'var(--green)'};font-weight:700">
+                ${aeAnomaly ? '⚠️ Structural Error' : '✓ Normal'} (${aeLoss.toFixed(2)})
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
     if (d.verified) {
       resultEl.innerHTML = `
         <div class="verify-result verify-success">
@@ -878,6 +923,8 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
             ${row('Issue Date', d.issue_date)}
           </div>
 
+          ${renderAiCard(d)}
+
           <div style="margin-top:12px;padding:8px 12px;background:rgba(0,0,0,0.25);border-radius:6px">
             <div style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:3px">SHA-256 BLOCKCHAIN HASH</div>
             <code style="font-family:var(--font-mono);font-size:10px;color:rgba(0,212,255,0.7);word-break:break-all">${d.hash}</code>
@@ -887,10 +934,11 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
       resultEl.innerHTML = `
         <div class="verify-result verify-fail" style="text-align:center">
           <div class="result-icon fail">✗</div>
-          <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:#F87171;letter-spacing:0.08em">NOT VERIFIED</div>
+          <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:#F87171;letter-spacing:0.08em">NOT VERIFIED ON BLOCKCHAIN</div>
           <div style="margin-top:8px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">
-            No matching record on blockchain.<br>This document may be tampered or not registered.
+            No matching hash found on blockchain ledger.<br>This document may be unregistered or hash tampered.
           </div>
+          ${renderAiCard(d)}
           ${d.hash && d.hash !== 'N/A' ? `<div style="margin-top:10px;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px"><code style="font-size:9px;font-family:var(--font-mono);color:rgba(248,113,113,0.6);word-break:break-all">${d.hash}</code></div>` : ''}
         </div>`;
     }

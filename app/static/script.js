@@ -432,6 +432,49 @@ function renderResults(results, context = 'verify') {
         <span class="result-field-val" style="color:var(--danger);font-size:12px">${r.error}</span>
       </div>` : '';
 
+    const isAnomaly = r.anomaly_detected || r.ela_tampered || (r.anomaly_analysis && r.anomaly_analysis.is_anomaly);
+    const elaTampered = r.ela_tampered || (r.anomaly_analysis && r.anomaly_analysis.ela_tampered);
+    const elaRatio = r.anomaly_analysis?.ela_pixel_ratio || 0.0;
+    const score = r.anomaly_score !== undefined ? r.anomaly_score : (r.anomaly_analysis?.anomaly_score || 0.0);
+    const textAnomaly = r.anomaly_analysis?.text_anomaly || false;
+    const imageAnomaly = r.anomaly_analysis?.image_anomaly || false;
+    const aeAnomaly = r.anomaly_analysis?.autoencoder_anomaly || false;
+    const aeLoss = r.anomaly_analysis?.autoencoder_loss || 0.0;
+
+    const aiAnomalySection = `
+      <div style="margin-top:12px;padding:12px;border-radius:8px;background:${isAnomaly ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.10)'};border:1px solid ${isAnomaly ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.30)'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:${isAnomaly ? '#F87171' : 'var(--green)'};display:flex;align-items:center;gap:6px">
+            <span style="font-size:14px">🤖</span> AI ANOMALY & ELA TAMPER ANALYSIS
+          </div>
+          <span style="font-size:10px;padding:3px 8px;border-radius:12px;background:${isAnomaly ? '#EF4444' : '#10B981'};color:#fff;font-weight:700;font-family:var(--font-mono)">
+            ${isAnomaly ? '⚠️ TAMPER RISK DETECTED' : '✓ AI VERIFIED CLEAN'}
+          </span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:10px;font-family:var(--font-mono)">
+          <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+            <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">ELA PIXEL TAMPER</div>
+            <div style="color:${elaTampered ? '#F87171' : 'var(--green)'};font-weight:700">
+              ${elaTampered ? '⚠️ Spliced/Edited' : '✓ Untampered'} (${(elaRatio * 100).toFixed(1)}%)
+            </div>
+          </div>
+          <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+            <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">ISOLATION FOREST</div>
+            <div style="color:${textAnomaly || imageAnomaly ? '#F87171' : 'var(--green)'};font-weight:700">
+              ${textAnomaly || imageAnomaly ? '⚠️ Outlier' : '✓ Inlier'} (${score.toFixed(2)})
+            </div>
+          </div>
+          <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+            <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">AUTOENCODER FL</div>
+            <div style="color:${aeAnomaly ? '#F87171' : 'var(--green)'};font-weight:700">
+              ${aeAnomaly ? '⚠️ Structural Error' : '✓ Normal'} (${aeLoss.toFixed(2)})
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
     card.innerHTML = `
       <div class="result-card-header">
         <div class="result-card-status-icon">${statusIconMap[statusClass]}</div>
@@ -445,8 +488,9 @@ function renderResults(results, context = 'verify') {
         ${errorSection}
         ${zkpSection}
         ${encSection}
+        ${aiAnomalySection}
         ${hashValue !== 'N/A' ? `
-        <div>
+        <div style="margin-top:10px">
           <div class="text-label" style="margin-bottom:6px">SHA-256 Hash</div>
           <div class="result-hash">
             <span style="flex:1">${hashValue}</span>
@@ -456,7 +500,7 @@ function renderResults(results, context = 'verify') {
           </div>
         </div>` : ''}
         ${context === 'upload' && !r.error ? `
-        <div class="chain-badge" style="align-self:flex-start">
+        <div class="chain-badge" style="align-self:flex-start;margin-top:8px">
           <div class="chain-badge-dot"></div>
           Registered on Blockchain
         </div>` : ''}
