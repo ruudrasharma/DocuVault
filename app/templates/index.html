@@ -233,10 +233,11 @@
   <div id="panel-verify" class="panel" style="display:none">
     <div class="page-header">
       <h2 class="page-title">VERIFY <span>DOCUMENT</span></h2>
-      <p class="page-subtitle" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">Cross-reference against the immutable blockchain ledger</p>
+      <p class="page-subtitle" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">Cross-reference against Immutable Blockchain Ledger & AI Anomaly Detection Engine</p>
     </div>
 
-    <div style="max-width:600px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1100px">
+      <!-- Left Column: Verification Form -->
       <div class="panel-card">
         <div class="panel-header">
           <div class="panel-icon" style="background:rgba(0,255,136,0.1);border-color:rgba(0,255,136,0.3);color:var(--green)">
@@ -247,7 +248,7 @@
         </div>
         <div class="panel-body">
 
-          <!-- Verify by ID -->
+          <!-- Verify by ID / File -->
           <div id="verify-step-1">
             <div style="display:flex;gap:10px;margin-bottom:20px">
               <button class="btn-action btn-cyan" id="tab-id" onclick="switchVerifyTab('id')" style="flex:1">By Doc ID</button>
@@ -272,9 +273,10 @@
                 <div class="upload-zone" onclick="document.getElementById('verify-file-inp').click()" style="padding:24px">
                   <div class="upload-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/></svg></div>
                   <div class="upload-title" id="vf-title" style="font-size:13px">Drop file to verify</div>
+                  <div style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">Runs OCR + Blockchain Hash + ELA Pixel Anomaly</div>
                   <input type="file" id="verify-file-inp" name="file" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.docx">
                 </div>
-                <button type="submit" class="btn-primary" style="margin-top:16px">⟶ VERIFY FILE</button>
+                <button type="submit" class="btn-primary" style="margin-top:16px">⟶ RUN FULL VERIFICATION & AI ANOMALY SCAN</button>
               </form>
             </div>
           </div>
@@ -301,6 +303,63 @@
             </div>
             {% endif %}
           </div>
+          {% endif %}
+
+        </div>
+      </div>
+
+      <!-- Right Column: AI Anomaly & Federated Learning Engine Card -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-icon" style="background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.3);color:var(--cyan)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.5 7.5"/><path d="M12 12v10"/></svg>
+          </div>
+          <div class="panel-title">AI Anomaly Engine & FL Status</div>
+          <div style="margin-left:auto"><span class="badge badge-info" style="font-size:9px">Active Models</span></div>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:12px">
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="width:8px;height:8px;border-radius:50%;background:#10B981;box-shadow:0 0 8px #10B981"></div>
+              <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--green)">AI Security Core</span>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--green);font-weight:600">ONLINE</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--font-mono);font-size:11px">
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:6px">
+              <span style="color:var(--text-muted)">🔬 Error Level Analysis (ELA)</span>
+              <span style="color:var(--cyan);font-weight:600">JPEG 90% Scale 10x</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:6px">
+              <span style="color:var(--text-muted)">🧠 PyTorch Autoencoder (FL)</span>
+              <span style="color:var(--cyan);font-weight:600">FedAvg (3 Nodes)</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:6px">
+              <span style="color:var(--text-muted)">🌲 Isolation Forest (Text/Image)</span>
+              <span style="color:var(--cyan);font-weight:600">1000 TF-IDF Features</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:6px">
+              <span style="color:var(--text-muted)">📂 Corpus Protection</span>
+              <span style="color:var(--cyan);font-weight:600">UUID Collision Proof</span>
+            </div>
+          </div>
+
+          <div style="margin-top:4px;padding:12px;background:rgba(0,212,255,0.04);border:1px dashed rgba(0,212,255,0.2);border-radius:8px">
+            <div style="font-size:11px;font-weight:600;color:var(--cyan);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              Dual Verification Security
+            </div>
+            <p style="font-size:10px;color:var(--text-muted);line-height:1.5;margin:0">
+              Blockchain checks confirm cryptographic hash match. Simultaneously, AI ELA & PyTorch models scan document pixels to detect modified grades, altered seals, or tampered stamps.
+            </p>
+          </div>
+
+          {% if current_user.role == 'admin' %}
+          <button onclick="triggerAdminReloadModels()" class="btn-action btn-cyan" style="width:100%;margin-top:4px;font-size:11px">
+            ⚡ HOT-RELOAD AI MODELS IN MEMORY
+          </button>
           {% endif %}
 
         </div>
@@ -947,6 +1006,20 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
   }
 });
 
+
+async function triggerAdminReloadModels() {
+  try {
+    const res = await fetch('/admin/reload-models', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      alert('⚡ AI Anomaly Models Hot-Reloaded Successfully in Memory!');
+    } else {
+      alert('Reload Error: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Failed to trigger model reload: ' + err.message);
+  }
+}
 
 // ── Admin panel ────────────────────────────────────────────────
 let _pendingId=null;
