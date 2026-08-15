@@ -86,7 +86,7 @@ def train_autoencoder(model: nn.Module, trainloader: DataLoader, epochs: int = 3
     return total_loss / max(steps, 1)
 
 
-def evaluate_image_autoencoder(model: nn.Module, file_path: str, threshold: float = 0.30) -> Tuple[bool, float]:
+def evaluate_image_autoencoder(model: nn.Module, file_path: str, threshold: float = 0.45) -> Tuple[bool, float]:
     """
     Evaluates a document against trained Autoencoder.
     Returns (is_anomalous, reconstruction_loss).
