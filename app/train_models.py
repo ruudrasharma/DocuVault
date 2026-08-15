@@ -1,4 +1,5 @@
 import os
+import sys
 import glob
 import shutil
 import logging
@@ -9,6 +10,8 @@ from PIL import Image
 from pdf2image import convert_from_path
 import pytesseract
 import joblib
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import IsolationForest
