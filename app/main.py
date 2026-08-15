@@ -37,6 +37,9 @@ def dashboard(role):
     return render_template('index.html')
 
 
+import uuid
+from .ml_anomaly import detect_anomaly, load_models, reload_models
+
 # ══════════════════════════════════════════════════════════════════
 #  UPLOAD — Full Pipeline
 #  Institute → file → OCR → fields → hash → ZKP → Blockchain + DB
@@ -48,22 +51,24 @@ def dashboard(role):
 def upload_doc():
     """
     Full upload pipeline:
-      1. Save file
+      1. Save file with unique UUID prefix (prevent overwriting historical corpus)
       2. Call OCR microservice → extract fields dict
       3. Normalize fields → canonical SHA-256 hash
-      4. Generate ZKP commitment (BN128 elliptic curve)
-      5. PQC-encrypt the hash for storage
-      6. Write block to blockchain: {cert_hash, zkp_proof, issuer, fields_summary}
-      7. Store record in SQL DB (with OCR fields as JSON metadata)
-      8. Return: {success, hash, id, block_index, fields, filename}
+      4. Run AI Anomaly Detection (ELA + ML)
+      5. Generate ZKP commitment (BN128 elliptic curve)
+      6. PQC-encrypt the hash for storage
+      7. Write block to blockchain: {cert_hash, zkp_proof, issuer, fields_summary}
+      8. Store record in SQL DB (with OCR fields as JSON metadata)
+      9. Return: {success, hash, id, block_index, fields, anomaly_analysis, filename}
     """
     file = request.files.get('file')
     if not file or not file.filename:
         return jsonify({'error': 'No file provided'}), 400
 
-    issuer   = session.get('username', 'institution')
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    issuer = session.get('username', 'institution')
+    original_name = secure_filename(file.filename)
+    unique_filename = f"{uuid.uuid4().hex[:12]}_{original_name}"
+    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
 
     # Form fields filled by the institution — used as fallback when OCR misses a field
     form_holder = request.form.get('holder_name', '').strip()
@@ -78,6 +83,11 @@ def upload_doc():
         cert_hash, norm_fields, raw_fields, block_index = process_upload(file_path, issuer)
         logger.info("Upload: hash=%s block=%d issuer=%s", cert_hash[:12], block_index, issuer)
 
+        # ── Step 4.5: Run AI Anomaly Detection ──────────────
+        raw_text_str = " ".join([str(v) for v in norm_fields.values() if v])
+        models = load_models()
+        is_anomaly, anomaly_score, anomaly_details = detect_anomaly(models, file_path, raw_text_str)
+
         # ── Step 5: PQC encrypt hash ─────────────────────────
         try:
             enc_hash, _ = pqc_encrypt(cert_hash)
@@ -85,7 +95,6 @@ def upload_doc():
             enc_hash = b""
 
         # ── Step 6: DB record ────────────────────────────────
-        # Priority: OCR-extracted name > form-entered name
         ocr_name    = norm_fields.get('name') or raw_fields.get('name', '')
         ocr_doctype = norm_fields.get('degree') or raw_fields.get('degree', '')
         ocr_date    = norm_fields.get('date') or raw_fields.get('date', '')
@@ -98,11 +107,13 @@ def upload_doc():
             'holder_name': final_name,
             'doc_type':    final_doctype,
             'issue_date':  final_date,
-            'filename':    filename,
+            'filename':    unique_filename,
+            'original_filename': original_name,
             'block_index': block_index,
             'ocr_engine':  raw_fields.get('_engine', 'unknown'),
             'ocr_confidence': raw_fields.get('_confidence', 0),
             'fields':      norm_fields,
+            'anomaly_analysis': anomaly_details,
         })
         try:
             rec = CertRecord(
@@ -122,18 +133,21 @@ def upload_doc():
         # ── Response ─────────────────────────────────────────
         display_fields = {k: v for k, v in norm_fields.items() if v}
         return jsonify({
-            'success':       True,
-            'hash':          cert_hash,
-            'id':            rec_id,
-            'block_index':   block_index,
-            'filename':      filename,
-            'fields':        display_fields,
-            'ocr_engine':    raw_fields.get('_engine', 'unknown'),
-            'ocr_confidence': raw_fields.get('_confidence', 0),
+            'success':          True,
+            'hash':             cert_hash,
+            'id':               rec_id,
+            'block_index':      block_index,
+            'filename':         original_name,
+            'saved_filename':   unique_filename,
+            'fields':           display_fields,
+            'ocr_engine':       raw_fields.get('_engine', 'unknown'),
+            'ocr_confidence':   raw_fields.get('_confidence', 0),
+            'anomaly_detected': is_anomaly,
+            'anomaly_score':    anomaly_score,
+            'anomaly_analysis': anomaly_details,
         })
 
     except RuntimeError as e:
-        # OCR service down / timeout
         logger.error("Upload runtime error: %s", e)
         return jsonify({'error': str(e)}), 503
     except Exception as e:
@@ -143,48 +157,65 @@ def upload_doc():
 
 # ══════════════════════════════════════════════════════════════════
 #  VERIFY — Full Pipeline
-#  Verifier → file → OCR → fields → hash → Blockchain → ZKP check
+#  Verifier → file → OCR → fields → hash → Blockchain → ZKP + AI Anomaly
 # ══════════════════════════════════════════════════════════════════
 
 @main_bp.route('/verify_document', methods=['POST'])
 @login_required
-@role_required('verifier', 'admin', 'institution')
+@role_required('verifier', 'admin', 'institution', 'citizen')
 def verify_document():
     """
     Full verify pipeline:
-      1. Save file
+      1. Save file to temporary verify path with UUID prefix
       2. OCR microservice → extract fields
       3. Normalize → SHA-256 hash
       4. Blockchain lookup by hash
       5. ZKP re-verification against stored proof
-      6. Return: {verified, hash, fields, block_data, issuer, issued_at}
+      6. AI Anomaly Detection (ELA + ML IsolationForest + Autoencoder)
+      7. Return: {verified, hash, fields, block_data, issuer, issued_at, anomaly_analysis}
     """
     file = request.files.get('file')
     if not file or not file.filename:
         return jsonify({'error': 'No file provided'}), 400
 
-    filename  = secure_filename(file.filename)
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    original_name = secure_filename(file.filename)
+    unique_filename = f"verify_{uuid.uuid4().hex[:12]}_{original_name}"
+    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
 
     try:
         file.save(file_path)
 
-        # ── OCR → hash → blockchain → ZKP ────────────────────
+        # ── Step 1: OCR → hash → blockchain → ZKP ────────────
         is_valid, cert_hash, block_data, norm_fields = verify_upload(file_path)
         logger.info("Verify: hash=%s valid=%s", cert_hash[:12] if cert_hash else 'N/A', is_valid)
 
+        # ── Step 2: AI Anomaly Detection (runs REGARDLESS of hash match) ──
+        raw_text_str = " ".join([str(v) for v in norm_fields.values() if v])
+        models = load_models()
+        is_anomaly, anomaly_score, anomaly_details = detect_anomaly(models, file_path, raw_text_str)
+
+        # Clean up temporary verification file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as rm_err:
+            logger.debug(f"Failed to remove temp verify file {file_path}: {rm_err}")
+
         if not is_valid or not block_data:
             return jsonify({
-                'verified':  False,
-                'hash':      cert_hash or 'N/A',
-                'message':   'Document not found on blockchain — possibly tampered or not registered.',
-                'fields':    {k: v for k, v in norm_fields.items() if v},
+                'verified':         False,
+                'hash':             cert_hash or 'N/A',
+                'message':          'Document not found on blockchain — possibly tampered or not registered.',
+                'fields':           {k: v for k, v in norm_fields.items() if v},
+                'anomaly_detected': is_anomaly,
+                'anomaly_score':    anomaly_score,
+                'ela_tampered':     anomaly_details.get('ela_tampered', False),
+                'anomaly_analysis': anomaly_details,
             })
 
-        # ── Pull metadata ────────────────────────────────────
+        # ── Step 3: Pull metadata ────────────────────────────
         fs = block_data.get('fields_summary', {})
 
-        # Merge with DB record if available
         db_meta = {}
         rec = CertRecord.query.filter_by(hash_value=cert_hash).first()
         if rec and rec.encrypted_metadata:
@@ -198,27 +229,29 @@ def verify_document():
         issued_str = dt.fromtimestamp(issued_at).strftime('%Y-%m-%d %H:%M UTC') if issued_at else '—'
 
         return jsonify({
-            'verified':      True,
-            'hash':          cert_hash,
-            'block_index':   block_data.get('_block_index'),
-            'block_hash':    block_data.get('_block_hash'),
-            'issuer':        block_data.get('issuer', '—'),
-            'issued_at':     issued_str,
-            # Primary identity fields
-            'holder_name':   fs.get('name') or db_meta.get('holder_name', '—'),
-            'doc_type':      fs.get('degree') or db_meta.get('doc_type', '—'),
-            'issue_date':    fs.get('date') or db_meta.get('issue_date', '—'),
-            # Extended CBSE / marksheet fields
-            'roll_no':       fs.get('roll_no', norm_fields.get('roll_no', '—')),
-            'board':         fs.get('board', norm_fields.get('board', '—')),
-            'institute':     fs.get('institute', norm_fields.get('institute', '—')),
-            'grade':         fs.get('grade', norm_fields.get('grade', '—')),
-            'year':          fs.get('year', norm_fields.get('year', '—')),
-            'mothers_name':  fs.get('mothers_name', norm_fields.get('mothers_name', '—')),
-            'fathers_name':  fs.get('fathers_name', norm_fields.get('fathers_name', '—')),
-            'date_of_birth': fs.get('date_of_birth', norm_fields.get('date_of_birth', '—')),
-            'fields':        {k: v for k, v in norm_fields.items() if v},
-            'zkp_verified':  True,
+            'verified':         True,
+            'hash':             cert_hash,
+            'block_index':      block_data.get('_block_index'),
+            'block_hash':       block_data.get('_block_hash'),
+            'issuer':           block_data.get('issuer', '—'),
+            'issued_at':        issued_str,
+            'holder_name':      fs.get('name') or db_meta.get('holder_name', '—'),
+            'doc_type':         fs.get('degree') or db_meta.get('doc_type', '—'),
+            'issue_date':       fs.get('date') or db_meta.get('issue_date', '—'),
+            'roll_no':          fs.get('roll_no', norm_fields.get('roll_no', '—')),
+            'board':            fs.get('board', norm_fields.get('board', '—')),
+            'institute':        fs.get('institute', norm_fields.get('institute', '—')),
+            'grade':            fs.get('grade', norm_fields.get('grade', '—')),
+            'year':             fs.get('year', norm_fields.get('year', '—')),
+            'mothers_name':     fs.get('mothers_name', norm_fields.get('mothers_name', '—')),
+            'fathers_name':     fs.get('fathers_name', norm_fields.get('fathers_name', '—')),
+            'date_of_birth':    fs.get('date_of_birth', norm_fields.get('date_of_birth', '—')),
+            'fields':           {k: v for k, v in norm_fields.items() if v},
+            'zkp_verified':     True,
+            'anomaly_detected': is_anomaly,
+            'anomaly_score':    anomaly_score,
+            'ela_tampered':     anomaly_details.get('ela_tampered', False),
+            'anomaly_analysis': anomaly_details,
         })
 
     except RuntimeError as e:
@@ -226,6 +259,25 @@ def verify_document():
         return jsonify({'error': str(e)}), 503
     except Exception as e:
         logger.error("Verify failed: %s", e)
+        return jsonify({'error': str(e)}), 500
+
+
+@main_bp.route('/admin/reload-models', methods=['POST'])
+@login_required
+@role_required('admin')
+def reload_ml_models():
+    """Admin endpoint to trigger dynamic hot-reload of ML anomaly models in memory."""
+    try:
+        updated_models = reload_models()
+        return jsonify({
+            'success': True,
+            'message': 'ML anomaly models reloaded successfully in memory.',
+            'has_text_model': 'text_model' in updated_models,
+            'has_image_model': 'image_model' in updated_models,
+            'has_autoencoder': 'autoencoder' in updated_models,
+        })
+    except Exception as e:
+        logger.error(f"Failed to reload ML models: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=DocuVault Federated Learning Aggregation Server
+After=network.target
+
+[Service]
+Type=simple
+User=rudra
+WorkingDirectory=/home/rudra/DocuVault
+Environment=FL_PORT=8080
+Environment=FL_ROUNDS=5
+ExecStart=/home/rudra/DocuVault/venv/bin/python3 scripts/fl_server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=docuvault-fl
+
+[Install]
+WantedBy=multi-user.target

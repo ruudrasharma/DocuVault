@@ -10,16 +10,16 @@ import os
 import re
 import logging
 from io import BytesIO
-from PIL import Image  # Added import
+from PIL import Image
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Global vectorizer (updated by load_models)
-text_vectorizer = TfidfVectorizer(max_features=1000)
+# Cached models in memory for fast thread-safe inference
+_cached_models = None
 
 def preprocess_image(file_path):
-    """Preprocesses image or PDF for features; resizes to 128x128."""
+    """Preprocesses image or PDF for features; resizes to 128x128 grayscale array."""
     try:
         if file_path and file_path.lower().endswith('.pdf'):
             images = convert_from_path(file_path)
@@ -35,21 +35,29 @@ def preprocess_image(file_path):
         img = cv2.resize(img, (128, 128))
         return img.flatten()
     except Exception as e:
-        logger.error(f"Preprocessing failed: {e} - Using default features")
+        logger.error(f"Image preprocessing failed: {e} - Using zero vector")
         return np.zeros(128 * 128, dtype=np.uint8)
 
-def preprocess_text(text):
-    """Transforms text to TF-IDF features using global vectorizer."""
+def preprocess_text(text, vectorizer=None):
+    """Transforms text to TF-IDF features using the provided vectorizer (thread-safe)."""
     if not text or not isinstance(text, str):
-        logger.warning("Empty or invalid text provided; using default features")
         return np.zeros(1000)
     try:
-        return text_vectorizer.transform([text]).toarray().flatten()
-    except ValueError as e:
-        logger.error(f"Text preprocessing failed: {e} - Vectorizer not fitted")
+        if vectorizer is not None:
+            return vectorizer.transform([text]).toarray().flatten()
+        else:
+            # Fallback inline vectorizer
+            vec = TfidfVectorizer(max_features=1000)
+            return vec.fit_transform([text]).toarray().flatten()
+    except Exception as e:
+        logger.error(f"Text preprocessing failed: {e}")
         return np.zeros(1000)
 
 def perform_ela(file_path, quality=90, scale=10, threshold=0.05):
+    """
+    Error Level Analysis (ELA) for image/PDF pixel tampering.
+    Re-compresses image at 90% JPEG quality and analyzes pixel error distribution.
+    """
     try:
         if not file_path or not os.path.exists(file_path):
             raise ValueError("Invalid or missing file path")
@@ -71,75 +79,124 @@ def perform_ela(file_path, quality=90, scale=10, threshold=0.05):
         difference = np.abs(original_array - resaved_array) * scale
         difference = np.clip(difference, 0, 255).astype(np.uint8)
         
-        mean_error = np.mean(difference)
-        std_error = np.std(difference)
-        anomalous_pixels = np.sum(difference > (mean_error + 2 * std_error)) / difference.size
-        is_tampered = anomalous_pixels > threshold
+        mean_error = float(np.mean(difference))
+        std_error = float(np.std(difference))
+        anomalous_pixels = float(np.sum(difference > (mean_error + 2 * std_error)) / difference.size)
+        is_tampered = bool(anomalous_pixels > threshold)
         
-        Image.fromarray(difference).save(os.path.join(os.path.dirname(file_path), 'ela_result.jpg'))
-        logger.debug(f"ELA completed for {file_path}: is_tampered={is_tampered}, anomalous_pixels={anomalous_pixels}")
-        return is_tampered, difference
+        ela_save_path = os.path.join(os.path.dirname(file_path), 'ela_result.jpg')
+        try:
+            Image.fromarray(difference).save(ela_save_path)
+        except Exception:
+            pass
+            
+        logger.debug(f"ELA completed for {file_path}: is_tampered={is_tampered}, anomalous_pixels={anomalous_pixels:.4f}")
+        return is_tampered, anomalous_pixels, difference
     except Exception as e:
         logger.error(f"ELA failed: {e} - Assuming no tampering")
-        return False, np.zeros((128, 128, 3), dtype=np.uint8)
+        return False, 0.0, np.zeros((128, 128, 3), dtype=np.uint8)
 
 def train_model(sample_image_features, sample_text_features, raw_texts):
-    """Trains models and fits vectorizer on corpus."""
-    global text_vectorizer
+    """Trains IsolationForest models and fits TfidfVectorizer on corpus."""
     if not raw_texts or not sample_image_features or not sample_text_features:
         raise ValueError("Sample data required for vectorizer and model fitting")
-    text_vectorizer.fit(raw_texts)
+    
+    vec = TfidfVectorizer(max_features=1000)
+    X_text = vec.fit_transform(raw_texts).toarray()
+    
     model_image = IsolationForest(contamination=0.1, random_state=42)
     model_image.fit(sample_image_features)
+    
     model_text = IsolationForest(contamination=0.1, random_state=42)
-    model_text.fit(sample_text_features)
-    return {'text_vectorizer': text_vectorizer, 'text_model': model_text, 'image_model': model_image}
+    model_text.fit(X_text)
+    
+    return {
+        'text_vectorizer': vec,
+        'text_model': model_text,
+        'image_model': model_image
+    }
 
-def detect_anomaly(models, file_path, text, extracted_data=None):
-    if models is None or not isinstance(models, dict):
+def detect_anomaly(models, file_path, text="", extracted_data=None):
+    """
+    Evaluates file for pixel & text anomalies.
+    Returns (is_anomaly, score, details_dict).
+    """
+    if models is None:
+        models = load_models()
+
+    if not isinstance(models, dict):
         logger.error("Invalid models provided")
-        return False, 0.0
+        return False, 0.0, {"error": "Invalid models"}
+
     image_model = models.get('image_model')
     text_model = models.get('text_model')
-    if not image_model or not text_model:
-        logger.error("Missing image or text model")
-        return False, 0.0
-    
-    is_tampered, ela_image = perform_ela(file_path) if file_path and os.path.exists(file_path) else (False, np.zeros((128, 128, 3), dtype=np.uint8))
+    vectorizer = models.get('text_vectorizer')
+    autoencoder = models.get('autoencoder')  # PyTorch Autoencoder if available
+
+    ela_tampered, ela_score, _ = perform_ela(file_path) if file_path and os.path.exists(file_path) else (False, 0.0, None)
     
     image_features = preprocess_image(file_path) if file_path else np.zeros(128*128, dtype=np.uint8)
-    text_features = preprocess_text(text) if text else np.zeros(1000, dtype=np.float32)
+    text_features = preprocess_text(text, vectorizer=vectorizer) if text else np.zeros(1000, dtype=np.float32)
     
-    try:
-        image_pred = image_model.predict([image_features])[0] == -1
-        text_pred = text_model.predict([text_features])[0] == -1
-        score = max(-image_model.decision_function([image_features])[0], -text_model.decision_function([text_features])[0])
-    except Exception as e:
-        logger.error(f"Anomaly detection failed: {e}")
-        return False, 0.0
+    image_pred = False
+    text_pred = False
+    image_score = 0.0
+    text_score = 0.0
 
-    final_pred = is_tampered or image_pred or text_pred
-    logger.debug(f"Anomaly detection result: is_anomaly={final_pred}, score={score}")
-    return final_pred, score
+    try:
+        if image_model:
+            image_pred = bool(image_model.predict([image_features])[0] == -1)
+            image_score = float(-image_model.decision_function([image_features])[0])
+        if text_model:
+            text_pred = bool(text_model.predict([text_features])[0] == -1)
+            text_score = float(-text_model.decision_function([text_features])[0])
+    except Exception as e:
+        logger.error(f"Anomaly score evaluation failed: {e}")
+
+    # PyTorch Autoencoder reconstruction check if loaded
+    ae_anomaly = False
+    ae_loss = 0.0
+    if autoencoder is not None and file_path and os.path.exists(file_path):
+        try:
+            from app.federated_learning import evaluate_image_autoencoder
+            ae_anomaly, ae_loss = evaluate_image_autoencoder(autoencoder, file_path)
+        except Exception as e:
+            logger.debug(f"Autoencoder evaluation skipped: {e}")
+
+    combined_score = max(image_score, text_score, float(ela_score * 5.0), float(ae_loss))
+    final_anomaly = bool(ela_tampered or image_pred or text_pred or ae_anomaly)
+
+    details = {
+        'is_anomaly': final_anomaly,
+        'anomaly_score': round(float(combined_score), 4),
+        'ela_tampered': bool(ela_tampered),
+        'ela_pixel_ratio': round(float(ela_score), 4),
+        'image_anomaly': bool(image_pred),
+        'text_anomaly': bool(text_pred),
+        'autoencoder_anomaly': bool(ae_anomaly),
+        'autoencoder_loss': round(float(ae_loss), 4),
+        'status': 'ANOMALY DETECTED' if final_anomaly else 'CLEAN'
+    }
+
+    logger.debug(f"Anomaly detection complete for {file_path}: {details}")
+    return final_anomaly, combined_score, details
 
 def forecast_forgery_trends(historical_data):
-    """Predicts forgery trends from logs."""
+    """Predicts forgery trends from historical event logs."""
     if len(historical_data) < 2:
-        logger.warning("Insufficient historical data for trend forecasting")
         return 0.0
     X = np.array([d[0] for d in historical_data]).reshape(-1, 1)
     y = np.array([d[1] for d in historical_data])
     model = LinearRegression()
     model.fit(X, y)
-    return model.predict(np.array([[X.max() + 1]]))[0]
+    return float(model.predict(np.array([[X.max() + 1]]))[0])
 
-def refine_models_with_federated():
-    """Simulates federated learning for model improvement."""
-    from app.federated_learning import simulate_federated_learning
-    simulate_federated_learning(mock_mode=True)
+def load_models(force_reload=False):
+    """Loads or initializes ML models from anomaly_models.pkl in a thread-safe manner."""
+    global _cached_models
+    if _cached_models is not None and not force_reload:
+        return _cached_models
 
-def load_models():
-    """Loads or initializes ML models from file or trains if not available."""
     models_file = os.path.join(os.path.dirname(__file__), 'models', 'anomaly_models.pkl')
     os.makedirs(os.path.dirname(models_file), exist_ok=True)
     try:
@@ -147,17 +204,25 @@ def load_models():
             models = joblib.load(f)
         if not isinstance(models, dict) or 'text_vectorizer' not in models or 'text_model' not in models or 'image_model' not in models:
             raise ValueError("Invalid model structure in anomaly_models.pkl")
-        global text_vectorizer
-        text_vectorizer = models['text_vectorizer']
-        logger.debug("Models loaded successfully from anomaly_models.pkl")
+        logger.info("ML Anomaly models loaded successfully from anomaly_models.pkl")
+        _cached_models = models
         return models
-    except (FileNotFoundError, ValueError, KeyError) as e:
-        logger.warning(f"Error loading models: {e}. Training new models with default data.")
+    except Exception as e:
+        logger.warning(f"Could not load anomaly_models.pkl ({e}). Initializing baseline models.")
         sample_image_features = [np.zeros(128*128, dtype=np.uint8)]
         sample_texts = ['Sample certificate text with name and grade', 'Another valid certificate']
-        sample_text_features = [preprocess_text(text) for text in sample_texts]
+        vec = TfidfVectorizer(max_features=1000)
+        X_text = vec.fit_transform(sample_texts).toarray()
+        sample_text_features = [X_text[0], X_text[1]]
         models = train_model(sample_image_features, sample_text_features, sample_texts)
-        with open(models_file, 'wb') as f:
-            joblib.dump(models, f)
-        logger.debug("New models trained and saved to anomaly_models.pkl")
+        try:
+            with open(models_file, 'wb') as f:
+                joblib.dump(models, f)
+        except Exception:
+            pass
+        _cached_models = models
         return models
+
+def reload_models():
+    """Forces reloading of models from disk without restarting the process."""
+    return load_models(force_reload=True)
