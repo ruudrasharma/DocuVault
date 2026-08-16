@@ -432,8 +432,8 @@ function renderResults(results, context = 'verify') {
         <span class="result-field-val" style="color:var(--danger);font-size:12px">${r.error}</span>
       </div>` : '';
 
-    const isAnomaly = r.anomaly_detected || r.ela_tampered || (r.anomaly_analysis && r.anomaly_analysis.is_anomaly);
-    const elaTampered = r.ela_tampered || (r.anomaly_analysis && r.anomaly_analysis.ela_tampered);
+    const isAnomaly = r.anomaly_analysis ? r.anomaly_analysis.is_anomaly : (r.anomaly_detected || false);
+    const elaTampered = r.anomaly_analysis ? r.anomaly_analysis.ela_tampered : (r.ela_tampered || false);
     const elaRatio = r.anomaly_analysis?.ela_pixel_ratio || 0.0;
     const score = r.anomaly_score !== undefined ? r.anomaly_score : (r.anomaly_analysis?.anomaly_score || 0.0);
     const textAnomaly = r.anomaly_analysis?.text_anomaly || false;

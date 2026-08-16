@@ -192,7 +192,7 @@ def verify_document():
         # ── Step 2: AI Anomaly Detection (runs REGARDLESS of hash match) ──
         raw_text_str = " ".join([str(v) for v in norm_fields.values() if v])
         models = load_models()
-        is_anomaly, anomaly_score, anomaly_details = detect_anomaly(models, file_path, raw_text_str)
+        is_anomaly, anomaly_score, anomaly_details = detect_anomaly(models, file_path, raw_text_str, extracted_data={'blockchain_valid': is_valid})
 
         # Clean up temporary verification file
         try:

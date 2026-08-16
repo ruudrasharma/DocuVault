@@ -53,10 +53,12 @@ def preprocess_text(text, vectorizer=None):
         logger.error(f"Text preprocessing failed: {e}")
         return np.zeros(1000)
 
-def perform_ela(file_path, quality=90, scale=10, threshold=0.05):
+def perform_ela(file_path, quality=90, scale=10, threshold=0.22):
     """
     Error Level Analysis (ELA) for image/PDF pixel tampering.
     Re-compresses image at 90% JPEG quality and analyzes pixel error distribution.
+    Scanned physical documents naturally produce ~8-18% compression noise.
+    Spliced/forged regions exhibit high localized variance (>22%).
     """
     try:
         if not file_path or not os.path.exists(file_path):
@@ -118,7 +120,7 @@ def train_model(sample_image_features, sample_text_features, raw_texts):
 
 def detect_anomaly(models, file_path, text="", extracted_data=None):
     """
-    Evaluates file for pixel & text anomalies.
+    Evaluates file for pixel & text anomalies using consensus & confidence scoring.
     Returns (is_anomaly, score, details_dict).
     """
     if models is None:
@@ -131,7 +133,11 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
     image_model = models.get('image_model')
     text_model = models.get('text_model')
     vectorizer = models.get('text_vectorizer')
-    autoencoder = models.get('autoencoder')  # PyTorch Autoencoder if available
+    autoencoder = models.get('autoencoder')
+
+    blockchain_valid = False
+    if isinstance(extracted_data, dict):
+        blockchain_valid = bool(extracted_data.get('blockchain_valid', False))
 
     ela_tampered, ela_score, _ = perform_ela(file_path) if file_path and os.path.exists(file_path) else (False, 0.0, None)
     
@@ -163,8 +169,18 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
         except Exception as e:
             logger.debug(f"Autoencoder evaluation skipped: {e}")
 
-    combined_score = max(image_score, text_score, float(ela_score * 5.0), float(ae_loss))
-    final_anomaly = bool(ela_tampered or image_pred or text_pred or ae_anomaly)
+    # Multi-signal consensus logic:
+    # Avoid flagging a genuine document on a single noisy metric if blockchain hash matches.
+    flag_count = sum([ela_tampered, image_pred, text_pred, ae_anomaly])
+    
+    if blockchain_valid:
+        # For blockchain-verified documents, require severe ELA (>25%) or at least 2 AI signals agreeing
+        final_anomaly = bool((ela_score > 0.25) or (flag_count >= 2))
+    else:
+        # Unverified / unregistered documents: any strong anomaly triggers warning
+        final_anomaly = bool(ela_tampered or flag_count >= 1)
+
+    combined_score = max(image_score, text_score, float(ela_score * 3.0), float(ae_loss))
 
     details = {
         'is_anomaly': final_anomaly,
@@ -175,6 +191,7 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
         'text_anomaly': bool(text_pred),
         'autoencoder_anomaly': bool(ae_anomaly),
         'autoencoder_loss': round(float(ae_loss), 4),
+        'blockchain_verified': blockchain_valid,
         'status': 'ANOMALY DETECTED' if final_anomaly else 'CLEAN'
     }
 

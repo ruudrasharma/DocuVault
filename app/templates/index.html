@@ -911,8 +911,8 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
        </div>`;
 
     const renderAiCard = (data) => {
-      const isAnomaly = data.anomaly_detected || data.ela_tampered || (data.anomaly_analysis && data.anomaly_analysis.is_anomaly);
-      const elaTampered = data.ela_tampered || (data.anomaly_analysis && data.anomaly_analysis.ela_tampered);
+      const isAnomaly = data.anomaly_analysis ? data.anomaly_analysis.is_anomaly : (data.anomaly_detected || false);
+      const elaTampered = data.anomaly_analysis ? data.anomaly_analysis.ela_tampered : (data.ela_tampered || false);
       const elaRatio = data.anomaly_analysis?.ela_pixel_ratio || 0.0;
       const score = data.anomaly_score !== undefined ? data.anomaly_score : (data.anomaly_analysis?.anomaly_score || 0.0);
       const textAnomaly = data.anomaly_analysis?.text_anomaly || false;
