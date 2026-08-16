@@ -89,7 +89,10 @@ def detect_and_embed(image_input) -> np.ndarray | None:
     norm = np.linalg.norm(feat_arr)
     if norm > 1e-6:
         feat_arr = feat_arr / norm
+    else:
+        feat_arr = np.ones(128, dtype=np.float32) / np.sqrt(128.0)
     return feat_arr
+
 
 
 def compare_embeddings(embedding_a: np.ndarray, embedding_b: np.ndarray) -> float:

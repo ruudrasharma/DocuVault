@@ -21,7 +21,7 @@ def test_app_boots(client):
 
 def test_login_with_correct_password(client, app):
     """A seeded user can log in with the correct password."""
-    r = client.post('/auth/login', data={
+    r = client.post('/login', data={
         'username': 'test_admin',
         'password': 'TestAdmin@9999',
     }, follow_redirects=True)
@@ -34,7 +34,7 @@ def test_login_with_correct_password(client, app):
 
 def test_login_with_wrong_password_fails(client):
     """Wrong password must be rejected — not silently accepted."""
-    r = client.post('/auth/login', data={
+    r = client.post('/login', data={
         'username': 'test_admin',
         'password': 'THIS_IS_WRONG_XYZ_999',
     }, follow_redirects=True)
@@ -81,6 +81,7 @@ def test_verify_endpoint_exists(client, sample_jpg):
 # ── Test 5: Wallet endpoints exist ────────────────────────────────────────────
 
 def test_wallet_endpoints_accessible(auth_client):
-    """Wallet dashboard returns 200 for logged-in admin."""
-    r = auth_client.get('/wallet/', follow_redirects=True)
+    """Wallet document listing returns 200 for logged-in user."""
+    r = auth_client.get('/wallet/my-documents', follow_redirects=True)
     assert r.status_code == 200, f"Wallet returned {r.status_code}"
+

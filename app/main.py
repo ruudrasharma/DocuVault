@@ -552,10 +552,12 @@ def vc_verify():
 # ══════════════════════════════════════════════════════════════════
 
 import hmac
+import hashlib
 _QR_HMAC_SECRET = os.environ.get('SECRET_KEY', 'docuvault-qr-secret-key').encode('utf-8')
 
 def generate_qr_hmac(cert_hash: str) -> str:
     return hmac.new(_QR_HMAC_SECRET, cert_hash.encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+
 
 @main_bp.route('/verify_by_hash', methods=['GET'])
 def verify_by_hash():
