@@ -77,8 +77,8 @@ def client(app):
 
 
 @pytest.fixture
-@pytest.fixture
 def auth_client(client, app):
+
     """Return a test client already logged in as test_admin (past login + 2FA)."""
     with app.app_context():
         from app.database import User
