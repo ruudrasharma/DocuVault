@@ -116,10 +116,13 @@ def login():
             flash('Please enter both username and password', 'error')
             return render_template('login.html')
 
-        # Case-insensitive username lookup — no auto-creation
-        user = User.query.filter(db.func.lower(User.username) == username.lower()).first()
+        # Case-insensitive username or email lookup — no auto-creation
+        user = User.query.filter(
+            (db.func.lower(User.username) == username.lower()) | 
+            (db.func.lower(User.google_email) == username.lower())
+        ).first()
         if not user:
-            logger.warning(f'Login failed: unknown username {username!r}')
+            logger.warning(f'Login failed: unknown username/email {username!r}')
             flash('Invalid credentials', 'error')
             return render_template('login.html')
 
