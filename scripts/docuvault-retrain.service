@@ -1,0 +1,14 @@
+[Unit]
+Description=DocuVault Federated Learning & Anomaly Model Retraining Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=rudra
+WorkingDirectory=/home/rudra/DocuVault
+ExecStart=/home/rudra/DocuVault/venv/bin/python3 -c "import sys; sys.path.insert(0, '.'); from app.train_models import train_anomaly_pipeline; train_anomaly_pipeline()"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

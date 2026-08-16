@@ -444,3 +444,100 @@ def verify_claim():
         logger.error(f"Verify claim failed: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+# ══════════════════════════════════════════════════════════════════
+#  BIOMETRICS & FACE VERIFICATION
+# ══════════════════════════════════════════════════════════════════
+
+@wallet_bp.route('/wallet/enroll_face', methods=['POST'])
+@login_required
+def enroll_face():
+    """
+    Opt-in facial enrollment for citizen wallet:
+    - Extracts 128-d face embedding vector
+    - Envelopes and encrypts embedding with wallet key
+    - DISCARDS the raw uploaded photo immediately (zero photo storage)
+    """
+    from .biometrics import detect_and_embed
+    file = request.files.get('selfie')
+    password = request.form.get('password')
+    if not file:
+        return jsonify({'error': 'Selfie photo file is required.'}), 400
+    if not password:
+        return jsonify({'error': 'Wallet password required to encrypt biometric profile.'}), 400
+
+    user = db.session.get(User, session['user_id'])
+    wk = WalletKey.query.filter_by(user_id=user.id).first()
+    if not wk:
+        return jsonify({'error': 'Wallet not yet initialized.'}), 400
+
+    try:
+        photo_bytes = file.read()
+        embedding = detect_and_embed(photo_bytes)
+        if embedding is None:
+            return jsonify({'error': 'No human face detected in uploaded selfie. Please try again with clear lighting.'}), 422
+
+        # Convert 128-d float array to raw bytes
+        emb_bytes = embedding.tobytes()
+        salt_bytes = bytes.fromhex(wk.kdf_salt)
+        encrypted_emb = wallet.encrypt_bytes(emb_bytes, password, salt_bytes)
+
+        wk.face_embedding_encrypted = encrypted_emb
+        db.session.commit()
+
+        # Explicitly delete raw photo bytes from memory
+        del photo_bytes
+
+        return jsonify({
+            'success': True,
+            'message': 'Face embedding enrolled and securely encrypted. Raw image has been discarded.'
+        })
+    except Exception as e:
+        logger.error(f"Face enrollment failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@wallet_bp.route('/wallet/verify_face', methods=['POST'])
+@login_required
+def verify_face():
+    """
+    Verifies live photo against a citizen's enrolled encrypted face embedding.
+    """
+    from .biometrics import verify_identity
+    import numpy as np
+
+    file = request.files.get('photo')
+    citizen_username = request.form.get('citizen_username')
+    password = request.form.get('citizen_password')
+
+    if not file or not citizen_username:
+        return jsonify({'error': 'Photo and citizen_username are required.'}), 400
+
+    citizen = User.query.filter_by(username=citizen_username).first()
+    if not citizen:
+        return jsonify({'error': 'Citizen account not found.'}), 404
+
+    wk = WalletKey.query.filter_by(user_id=citizen.id).first()
+    if not wk or not wk.face_embedding_encrypted:
+        return jsonify({'error': 'Citizen has not enrolled for facial biometric verification.'}), 404
+
+    try:
+        photo_bytes = file.read()
+        salt_bytes = bytes.fromhex(wk.kdf_salt)
+        decrypted_emb_bytes = wallet.decrypt_bytes(wk.face_embedding_encrypted, password, salt_bytes)
+        ref_embedding = np.frombuffer(decrypted_emb_bytes, dtype=np.float32)
+
+        is_match, score = verify_identity(photo_bytes, ref_embedding)
+        del photo_bytes
+
+        return jsonify({
+            'verified': is_match,
+            'similarity_score': score,
+            'threshold': 0.72,
+            'citizen': citizen_username
+        })
+    except Exception as e:
+        logger.error(f"Face verification failed: {e}")
+        return jsonify({'error': f'Decryption or biometric comparison failed: {e}'}), 500
+
+

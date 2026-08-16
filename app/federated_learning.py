@@ -196,8 +196,35 @@ def simulate_federated_learning(data_dir: str = None, num_clients: int = 3, mock
             avg_dict[key] = avg_tensor
 
         global_model.load_state_dict(avg_dict)
-        avg_round_loss = sum(round_losses) / len(round_losses)
-        logger.info(f"FL Round {round_idx}/3 Complete — Average Reconstruction Loss: {avg_round_loss:.4f}")
+    avg_round_loss = sum(round_losses) / len(round_losses)
+    logger.info(f"FL Round 3/3 Complete — Average Reconstruction Loss: {avg_round_loss:.4f}")
 
     return global_model
 
+
+def export_global_model_to_anomaly_format(global_model: DocumentAutoencoder, output_path: str = "app/models/anomaly_models.pkl") -> bool:
+    """
+    Exports federated global model into anomaly_models.pkl bundle for live inference.
+    Preserves text vectorizer, text model, and image model while hot-swapping the Autoencoder.
+    """
+    import joblib
+    from app.ml_anomaly import load_models
+
+    current_models = load_models()
+    updated_models = dict(current_models)
+    updated_models['autoencoder'] = global_model
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    temp_file = f"{output_path}.fl_tmp"
+
+    try:
+        with open(temp_file, 'wb') as f:
+            joblib.dump(updated_models, f)
+        os.replace(temp_file, output_path)
+        logger.info(f"Federated model exported successfully to {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to export federated model: {e}")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        return False

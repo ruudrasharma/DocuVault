@@ -118,6 +118,35 @@ class WalletKey(db.Model):
     # Post-Quantum Cryptography (ML-KEM-768 / Kyber) fields
     pqc_public_key = db.Column(db.LargeBinary, nullable=True)
     pqc_encrypted_private_key = db.Column(db.LargeBinary, nullable=True)
+    # Encrypted 128-d face embedding vector
+    face_embedding_encrypted = db.Column(db.LargeBinary, nullable=True)
+
+
+
+class VerifiableCredential(db.Model):
+    __tablename__ = 'verifiable_credential'
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=True)
+    cert_hash = db.Column(db.String(64), nullable=False, index=True)
+    issuer_username = db.Column(db.String(120), nullable=False)
+    holder_username = db.Column(db.String(120), nullable=False)
+    vc_json = db.Column(db.Text, nullable=False)
+    signature_hex = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class AnalyticsLog(db.Model):
+    __tablename__ = 'analytics_log'
+    id = db.Column(db.Integer, primary_key=True)
+    event_type = db.Column(db.String(50), nullable=False)  # 'upload', 'verify', 'grant', 'revoke'
+    username = db.Column(db.String(120), nullable=True)
+    cert_hash = db.Column(db.String(64), nullable=True)
+    status = db.Column(db.String(50), nullable=False)      # 'verified', 'rejected', 'anomaly_detected', etc.
+    anomaly_score = db.Column(db.Float, default=0.0)
+    details_json = db.Column(db.Text, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
 
 
 
