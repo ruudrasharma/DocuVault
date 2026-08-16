@@ -77,6 +77,7 @@ def client(app):
 
 
 @pytest.fixture
+@pytest.fixture
 def auth_client(client, app):
     """Return a test client already logged in as test_admin (past login + 2FA)."""
     with app.app_context():
@@ -87,13 +88,13 @@ def auth_client(client, app):
         totp_code = pyotp.TOTP(secret).now()
 
     # Step 1: login
-    client.post('/auth/login', data={
+    client.post('/login', data={
         'username': 'test_admin',
         'password': 'TestAdmin@9999',
     }, follow_redirects=True)
 
     # Step 2: 2FA
-    client.post('/auth/verify_2fa', data={'code': totp_code}, follow_redirects=True)
+    client.post('/verify_2fa', data={'totp': totp_code}, follow_redirects=True)
 
     return client
 
@@ -108,12 +109,13 @@ def inst_client(client, app):
         import pyotp
         totp_code = pyotp.TOTP(secret).now()
 
-    client.post('/auth/login', data={
+    client.post('/login', data={
         'username': 'test_institution',
         'password': 'TestInst@9999',
     }, follow_redirects=True)
-    client.post('/auth/verify_2fa', data={'code': totp_code}, follow_redirects=True)
+    client.post('/verify_2fa', data={'totp': totp_code}, follow_redirects=True)
     return client
+
 
 
 @pytest.fixture

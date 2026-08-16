@@ -428,9 +428,14 @@ def admin_users():
     # Ordinary admins never see superadmin or protected system accounts
     users = User.query.filter(
         User.role != 'student',
-        User.role != 'superadmin',
-        User.is_protected != True
+        User.role != 'superadmin'
     ).order_by(User.role, User.username).all()
+
+    filtered = [
+        u for u in users
+        if not getattr(u, 'is_protected', False) and u.role != 'superadmin'
+    ]
+
     return jsonify([{
         'id': u.id,
         'username': u.username,
@@ -438,8 +443,9 @@ def admin_users():
         'provider': u.oauth_provider,
         'email': u.google_email,
         'name': u.google_name,
-        'is_protected': u.is_protected,
-    } for u in users])
+        'is_protected': getattr(u, 'is_protected', False),
+    } for u in filtered])
+
 
 
 @auth_bp.route('/admin/delete-user/<int:user_id>', methods=['POST', 'DELETE'])
