@@ -60,15 +60,18 @@ def _check_image_dimensions(file_path: str) -> tuple[bool, str]:
 @main_bp.route('/')
 def index():
     if 'user_id' in session:
+        if session.get('role') == 'superadmin':
+            return redirect(url_for('superadmin.dashboard'))
         return redirect(url_for('main.dashboard', role=session.get('role')))
     return redirect(url_for('auth.login'))
 
 
 @main_bp.route('/dashboard/<role>')
 @login_required
-@role_required('admin', 'institution', 'verifier', 'citizen')
+@role_required('superadmin', 'admin', 'institution', 'verifier', 'citizen')
 def dashboard(role):
     return render_template('index.html')
+
 
 
 import uuid

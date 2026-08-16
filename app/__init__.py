@@ -104,15 +104,17 @@ from .main import main_bp
 from .auth import auth_bp
 from .routes_wallet import wallet_bp
 from .routes_citizen import citizen_bp
+from .superadmin import superadmin_bp
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(wallet_bp)
 app.register_blueprint(citizen_bp)
+app.register_blueprint(superadmin_bp)
 
 # ── DB initialisation + column migrations ─────────────────────────────────────
 with app.app_context():
-    from .database import User, PendingAccount
+    from .database import User, PendingAccount, AuditLog
     db.create_all()
     try:
         from sqlalchemy import text
@@ -123,6 +125,7 @@ with app.app_context():
                 ('google_email',   'VARCHAR(120)'),
                 ('google_name',    'VARCHAR(120)'),
                 ('google_avatar',  'VARCHAR(500)'),
+                ('is_protected',   'BOOLEAN NOT NULL DEFAULT 0'),
             ]:
                 try:
                     conn.execute(text(f'ALTER TABLE user ADD COLUMN {col} {definition}'))
@@ -134,6 +137,7 @@ with app.app_context():
             for col, definition in [
                 ('pqc_public_key', 'BLOB'),
                 ('pqc_encrypted_private_key', 'BLOB'),
+                ('face_embedding_encrypted', 'BLOB'),
             ]:
                 try:
                     conn.execute(text(f'ALTER TABLE wallet_key ADD COLUMN {col} {definition}'))

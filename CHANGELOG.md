@@ -90,3 +90,15 @@ All notable changes across all 10 implementation phases are documented here.
 ## [Phase 9] — Testing, Documentation & Deployment Hardening — 2026-08-16
 - Completed comprehensive documentation: `docs/API.md` (all endpoints), `docs/DEMO.md` (presentation script), and refreshed `README.md`.
 - Complete test suite created in `tests/` across security, cryptography, ZKP, blockchain signing, VC, watermarking, biometrics, and FL.
+
+---
+
+## [Superadmin & Protected Governance] — 2026-08-16
+- Added `superadmin` role tier and `is_protected` boolean attribute on `User` in `app/database.py`.
+- Created `AuditLog` model for immutable action history recording.
+- Created `scripts/seed_superadmin.py` provisioning tool with Google OAuth email binding (`rudraksharma187@gmail.com`).
+- Updated `app/auth.py` with `@reverify_2fa` step-up 2FA decorator (5-minute sliding window), `/auth/stepup_2fa` route, and server-side deletion prevention for protected accounts.
+- Built dedicated `/superadmin` blueprint (`app/superadmin.py`) with raw Database Inspector, Blockchain Deep-Scanner, Audit Log timeline, and System Diagnostic hot-reloads.
+- Built dedicated Dark Obsidian & Gold Command Center template in `app/templates/superadmin.html`.
+- Added `tests/test_superadmin.py`.
+

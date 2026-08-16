@@ -12,8 +12,9 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=True)   # nullable for OAuth users
     salt = db.Column(db.String(32), nullable=True)             # nullable for OAuth users
-    role = db.Column(db.String(20), nullable=False)            # admin | institution | verifier
+    role = db.Column(db.String(20), nullable=False)            # superadmin | admin | institution | verifier | citizen
     totp_secret = db.Column(db.String(32), nullable=True)
+    is_protected = db.Column(db.Boolean, default=False, nullable=False)  # Immutable root protection
 
     # Google OAuth fields
     oauth_provider = db.Column(db.String(20), nullable=False, default='local')  # 'local' | 'google'
@@ -146,6 +147,20 @@ class AnalyticsLog(db.Model):
     details_json = db.Column(db.Text, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class AuditLog(db.Model):
+    """Immutable audit trail for all sensitive administrative and system actions."""
+    __tablename__ = 'audit_log'
+    id = db.Column(db.Integer, primary_key=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    actor_username = db.Column(db.String(120), nullable=False)
+    action = db.Column(db.String(100), nullable=False)  # e.g., 'DELETE_USER', 'MODIFY_DB_RECORD', 'STEPUP_2FA_AUTH'
+    target = db.Column(db.String(255), nullable=True)   # e.g., 'user:5', 'document:12', 'blockchain:reverify'
+    ip_address = db.Column(db.String(45), nullable=True)
+    details_json = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
 
 
 

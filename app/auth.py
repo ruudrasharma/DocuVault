@@ -34,6 +34,8 @@ def _apply_limit(f):
 
 # ── Decorators ────────────────────────────────────────────────────────────────
 
+import time
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -45,17 +47,47 @@ def login_required(f):
     return decorated
 
 def role_required(*roles):
+    """Enforces role check. Superadmin always has access to all admin/institution/verifier routes."""
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            if session.get('role') not in roles:
-                if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
-                    return jsonify({'error': f'Access restricted. Required role: {", ".join(roles)}'}), 403
-                flash('Insufficient permissions', 'error')
-                return redirect(url_for('auth.login'))
-            return f(*args, **kwargs)
+            user_role = session.get('role')
+            # Superadmin has universal administrative access
+            if user_role == 'superadmin' or user_role in roles:
+                return f(*args, **kwargs)
+            if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                return jsonify({'error': f'Access restricted. Required role: {", ".join(roles)}'}), 403
+            flash('Insufficient permissions', 'error')
+            return redirect(url_for('auth.login'))
         return decorated
     return decorator
+
+
+def reverify_2fa(f):
+    """
+    Step-up 2FA decorator for high-privilege and destructive operations.
+    Enforces a 5-minute (300s) sliding security window since last TOTP verification.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Authentication required.'}), 401
+
+        last_verified = session.get('sensitive_verified_at', 0)
+        now_ts = time.time()
+
+        if now_ts - last_verified > 300:
+            if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                return jsonify({
+                    'error': 'STEPUP_2FA_REQUIRED',
+                    'message': 'This high-privilege action requires fresh 2FA verification.',
+                    'stepup_url': url_for('auth.stepup_2fa')
+                }), 403
+            session['next_sensitive_url'] = request.url
+            return redirect(url_for('auth.stepup_2fa'))
+        return f(*args, **kwargs)
+    return decorated
+
 
 
 # ── QR Code helper ────────────────────────────────────────────────────────────
@@ -125,6 +157,9 @@ def verify_2fa():
         token = request.form.get('totp', '').strip()
         if user.verify_totp(token):
             session['verified'] = True
+            session['sensitive_verified_at'] = time.time()
+            if user.role == 'superadmin':
+                return redirect(url_for('superadmin.dashboard'))
             return redirect(url_for('main.dashboard', role=session['role']))
         flash('Invalid or expired OTP code. Try again.', 'error')
 
@@ -132,6 +167,31 @@ def verify_2fa():
     qr_b64  = make_qr_base64(user.get_totp_uri())
     totp_uri = user.get_totp_uri()
     return render_template('verify_2fa.html', qr_b64=qr_b64, totp_uri=totp_uri, username=user.username)
+
+
+@auth_bp.route('/stepup_2fa', methods=['GET', 'POST'])
+@login_required
+@_apply_limit
+def stepup_2fa():
+    """Step-up 2FA re-verification before sensitive or destructive actions."""
+    user = User.query.get(session['user_id'])
+    if not user:
+        return redirect(url_for('auth.login'))
+
+    if request.method == 'POST':
+        token = request.form.get('totp', '').strip() or request.json.get('totp', '').strip() if request.is_json else ''
+        if user.verify_totp(token):
+            session['sensitive_verified_at'] = time.time()
+            next_url = session.pop('next_sensitive_url', None)
+            if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                return jsonify({'success': True, 'message': 'Step-up 2FA verified successfully.'})
+            return redirect(next_url or url_for('superadmin.dashboard'))
+
+        if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+            return jsonify({'error': 'Invalid 2FA code.'}), 400
+        flash('Invalid OTP code. Please try again.', 'error')
+
+    return render_template('verify_2fa.html', qr_b64=make_qr_base64(user.get_totp_uri()), totp_uri=user.get_totp_uri(), username=user.username, is_stepup=True)
 
 
 @auth_bp.route('/logout', methods=['GET', 'POST'])
@@ -149,6 +209,7 @@ def get_role():
     return jsonify({
         'role': session.get('role'),
         'username': session.get('username'),
+        'is_protected': getattr(user, 'is_protected', False),
         'oauth_provider': user.oauth_provider if user else 'local',
         'google_name': user.google_name if user else None,
         'google_avatar': user.google_avatar if user else None,
@@ -176,59 +237,70 @@ def google_callback():
             return redirect(url_for('auth.login'))
 
         google_id = user_info.get('sub')
-        email = user_info.get('email', '')
+        email = user_info.get('email', '').strip()
         name = user_info.get('name', email.split('@')[0])
         avatar = user_info.get('picture', '')
 
-        # Find existing user by google_id
-        user = User.query.filter_by(google_id=google_id).first()
+        # 1. Match existing user by google_id OR google_email
+        user = User.query.filter(
+            (User.google_id == google_id) | (db.func.lower(User.google_email) == email.lower())
+        ).first()
 
-        if not user:
-            # Check if email already exists as local user
-            user = User.query.filter_by(google_email=email).first()
-            if user and user.oauth_provider == 'local':
-                flash('This email is linked to a local account. Please sign in with username & password.', 'error')
-                return redirect(url_for('auth.login'))
-
-            # Auto-create verifier account
-            username = email.split('@')[0].replace('.', '_').replace('-', '_')
-            # Make username unique if taken
-            base_username = username
-            count = 1
-            while User.query.filter_by(username=username).first():
-                username = f'{base_username}_{count}'
-                count += 1
-
-            user = User(
-                username=username,
-                password_hash='',   # No password for OAuth users
-                salt='',            # No salt for OAuth users
-                oauth_provider='google',
-                google_id=google_id,
-                google_email=email,
-                google_name=name,
-                google_avatar=avatar,
-                role='verifier',
-            )
-            db.session.add(user)
-            db.session.commit()
-            logger.info(f'New verifier account created via Google OAuth: {username} ({email})')
-        else:
-            # Update profile info
+        if user:
+            # Update OAuth fields
+            user.google_id = google_id
+            user.google_email = email
             user.google_name = name
             user.google_avatar = avatar
             db.session.commit()
 
+            session['user_id'] = user.id
+            session['role'] = user.role
+            session['username'] = user.username
+
+            # Special-case: Protected accounts / Superadmin MUST complete TOTP 2FA
+            if user.is_protected or user.role == 'superadmin':
+                logger.info(f"Protected superadmin account {user.username} authenticated via Google SSO -> requesting TOTP")
+                return redirect(url_for('auth.verify_2fa'))
+
+            session['verified'] = True
+            return redirect(url_for('main.dashboard', role=user.role))
+
+        # 2. If no user found, auto-create standard verifier account
+        username = email.split('@')[0].replace('.', '_').replace('-', '_')
+        base_username = username
+        count = 1
+        while User.query.filter_by(username=username).first():
+            username = f'{base_username}_{count}'
+            count += 1
+
+        user = User(
+            username=username,
+            password_hash='',
+            salt='',
+            oauth_provider='google',
+            google_id=google_id,
+            google_email=email,
+            google_name=name,
+            google_avatar=avatar,
+            role='verifier',
+            is_protected=False,
+        )
+        db.session.add(user)
+        db.session.commit()
+        logger.info(f'New verifier account created via Google OAuth: {username} ({email})')
+
         session['user_id'] = user.id
         session['role'] = user.role
         session['username'] = user.username
-        session['verified'] = True  # Google auth = no 2FA needed
+        session['verified'] = True
         return redirect(url_for('main.dashboard', role=user.role))
 
     except Exception as e:
         logger.error(f'Google OAuth error: {e}')
         flash('Google sign-in failed. Please try again.', 'error')
         return redirect(url_for('auth.login'))
+
 
 
 # ── Admin: Account Management ─────────────────────────────────────────────────
@@ -353,7 +425,12 @@ def admin_regenerate_secret():
 @login_required
 @role_required('admin')
 def admin_users():
-    users = User.query.filter(User.role != 'student').order_by(User.role, User.username).all()
+    # Ordinary admins never see superadmin or protected system accounts
+    users = User.query.filter(
+        User.role != 'student',
+        User.role != 'superadmin',
+        User.is_protected != True
+    ).order_by(User.role, User.username).all()
     return jsonify([{
         'id': u.id,
         'username': u.username,
@@ -361,10 +438,11 @@ def admin_users():
         'provider': u.oauth_provider,
         'email': u.google_email,
         'name': u.google_name,
+        'is_protected': u.is_protected,
     } for u in users])
 
 
-@auth_bp.route('/admin/delete-user/<int:user_id>', methods=['DELETE'])
+@auth_bp.route('/admin/delete-user/<int:user_id>', methods=['POST', 'DELETE'])
 @login_required
 @role_required('admin')
 def admin_delete_user(user_id):
@@ -373,6 +451,23 @@ def admin_delete_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found.'}), 404
+
+    # Strict server-side route-level enforcement: protected accounts can NEVER be deleted
+    if getattr(user, 'is_protected', False) or user.role == 'superadmin':
+        logger.warning(f"BLOCKED: Attempt to delete protected account '{user.username}' by {session.get('username')}")
+        return jsonify({'error': 'Protected system account cannot be modified or deleted.'}), 403
+
+    from .database import AuditLog
+    audit = AuditLog(
+        actor_id=session.get('user_id'),
+        actor_username=session.get('username', 'admin'),
+        action='DELETE_USER',
+        target=f'user:{user.id}:{user.username}',
+        ip_address=request.remote_addr,
+        details_json=f'{{"deleted_username": "{user.username}", "role": "{user.role}"}}'
+    )
+    db.session.add(audit)
     db.session.delete(user)
     db.session.commit()
-    return jsonify({'success': True})
+    logger.info(f"User '{user.username}' deleted by {session.get('username')}")
+    return jsonify({'success': True, 'message': f"User '{user.username}' deleted."})
