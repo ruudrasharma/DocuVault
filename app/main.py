@@ -477,20 +477,7 @@ def chain_stats():
 
 
 # ══════════════════════════════════════════════════════════════════
-#  ADMIN
-# ══════════════════════════════════════════════════════════════════
 
-@main_bp.route('/admin/users', methods=['GET'])
-@login_required
-@role_required('admin')
-def admin_users():
-    users = User.query.all()
-    return jsonify([{
-        'id':       u.id,
-        'username': u.username,
-        'role':     u.role,
-        'provider': getattr(u, 'oauth_provider', 'local'),
-    } for u in users])
 
 
 # ══════════════════════════════════════════════════════════════════
