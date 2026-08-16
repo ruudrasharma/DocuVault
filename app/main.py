@@ -22,6 +22,40 @@ main_bp = Blueprint('main', __name__)
 UPLOAD_FOLDER = 'data'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ── Upload validation ──────────────────────────────────────────────────────────
+_ALLOWED_MAGIC = {
+    b'%PDF':           'pdf',
+    b'\xff\xd8\xff':  'jpeg',
+    b'\x89PNG':        'png',
+}
+_MAX_IMAGE_DIM = 6000  # pixels per side
+
+
+def _validate_upload(file_stream) -> tuple[bool, str]:
+    """
+    Read the first 8 bytes to confirm the file is actually PDF/JPEG/PNG.
+    Returns (is_valid, detected_type_or_error_message).
+    """
+    header = file_stream.read(8)
+    file_stream.seek(0)
+    for magic, ftype in _ALLOWED_MAGIC.items():
+        if header.startswith(magic):
+            return True, ftype
+    return False, f'Unsupported file type (magic bytes: {header[:4].hex()!r})'
+
+
+def _check_image_dimensions(file_path: str) -> tuple[bool, str]:
+    """Reject images whose dimensions exceed _MAX_IMAGE_DIM to prevent decompression bombs."""
+    try:
+        from PIL import Image
+        with Image.open(file_path) as img:
+            w, h = img.size
+            if w > _MAX_IMAGE_DIM or h > _MAX_IMAGE_DIM:
+                return False, f'Image too large: {w}x{h} (max {_MAX_IMAGE_DIM}x{_MAX_IMAGE_DIM})'
+    except Exception:
+        pass  # Non-image files (PDFs) skip silently
+    return True, 'ok'
+
 
 @main_bp.route('/')
 def index():
@@ -65,6 +99,11 @@ def upload_doc():
     if not file or not file.filename:
         return jsonify({'error': 'No file provided'}), 400
 
+    # ── Magic-byte validation (before saving) ─────────────────────
+    valid, ftype = _validate_upload(file.stream)
+    if not valid:
+        return jsonify({'error': f'Invalid file: {ftype}'}), 415
+
     issuer = session.get('username', 'institution')
     original_name = secure_filename(file.filename)
     unique_filename = f"{uuid.uuid4().hex[:12]}_{original_name}"
@@ -77,7 +116,13 @@ def upload_doc():
 
     try:
         file.save(file_path)
-        logger.info("File saved: %s", file_path)
+        logger.info("File saved: %s (%s)", file_path, ftype)
+
+        # ── Dimension cap (after saving, before OCR) ───────────────
+        ok, dim_err = _check_image_dimensions(file_path)
+        if not ok:
+            os.unlink(file_path)
+            return jsonify({'error': dim_err}), 413
 
         # ── Step 1-4: OCR → hash → ZKP ──────────────────────
         cert_hash, norm_fields, raw_fields, block_index = process_upload(file_path, issuer)
@@ -178,12 +223,24 @@ def verify_document():
     if not file or not file.filename:
         return jsonify({'error': 'No file provided'}), 400
 
+    # ── Magic-byte validation ─────────────────────────────────────
+    valid, ftype = _validate_upload(file.stream)
+    if not valid:
+        return jsonify({'error': f'Invalid file: {ftype}'}), 415
+
     original_name = secure_filename(file.filename)
     unique_filename = f"verify_{uuid.uuid4().hex[:12]}_{original_name}"
     file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
 
     try:
         file.save(file_path)
+
+        # ── Dimension cap ───────────────────────────────────────────
+        ok, dim_err = _check_image_dimensions(file_path)
+        if not ok:
+            if os.path.exists(file_path):
+                os.unlink(file_path)
+            return jsonify({'error': dim_err}), 413
 
         # ── Step 1: OCR → hash → blockchain → ZKP ────────────
         is_valid, cert_hash, block_data, norm_fields = verify_upload(file_path)

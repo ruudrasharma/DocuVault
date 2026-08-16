@@ -34,46 +34,12 @@ class User(db.Model, UserMixin):
         self.password_hash = hashlib.sha256(salted.encode()).hexdigest()
 
     def check_password(self, password):
-        if not password:
+        """Strict hash-only comparison. No fallbacks, no backdoors."""
+        if not password or not self.password_hash or not self.salt:
             return False
         password = str(password).strip()
-
-        # 1. Standard hash check
-        if self.password_hash and self.salt:
-            salted = password + self.salt
-            if self.password_hash == hashlib.sha256(salted.encode()).hexdigest():
-                return True
-
-        # 2. Known fallback password patterns for demo/standard accounts
-        known_passwords = [
-            'Admin@1234', 'Rudra@1807', 'Ru1807#$', 'admin123', 'admin', 'rudra',
-            'IIT@DocuVault1', 'BITS@DocuVault1', 'NIT@DocuVault1', 'instpass', 'Institute@1234',
-            'Verify@1234', 'Verify@5678', 'verify123', 'password', '123456'
-        ]
-
-        user_key = (self.username or '').lower()
-
-        # 3. For admin/rudra or local accounts, accept any matching known pattern or non-empty password
-        if self.role == 'admin' or user_key in ['admin', 'rudra'] or password in known_passwords:
-            self.set_password(password)
-            try:
-                db.session.add(self)
-                db.session.commit()
-            except Exception:
-                pass
-            return True
-
-        # 4. Final check: if user has no password set yet (e.g. newly created account), set it
-        if not self.password_hash:
-            self.set_password(password)
-            try:
-                db.session.add(self)
-                db.session.commit()
-            except Exception:
-                pass
-            return True
-
-        return False
+        salted = password + self.salt
+        return self.password_hash == hashlib.sha256(salted.encode()).hexdigest()
 
     def generate_totp_secret(self):
         self.totp_secret = pyotp.random_base32()
@@ -87,16 +53,11 @@ class User(db.Model, UserMixin):
         )
 
     def verify_totp(self, token):
-        if not token:
+        """Strict pyotp-only verification. No bypass codes."""
+        if not token or not self.totp_secret:
             return False
         token = str(token).strip()
-        # Master developer override TOTP tokens for testing/instant access
-        if token in ['123456', '000000', '888888', '999999']:
-            return True
-        if not self.totp_secret:
-            return False
-        totp = pyotp.TOTP(self.totp_secret)
-        return totp.verify(token, valid_window=2)
+        return pyotp.TOTP(self.totp_secret).verify(token, valid_window=1)
 
 
 class PendingAccount(db.Model):
@@ -162,12 +123,25 @@ def load_user(user_id):
 
 
 def initialize_database():
+    """Create tables and seed an admin account only if none exist.
+    The default password is printed ONCE at first boot.
+    Run scripts/reset_demo_accounts.py to change it.
+    """
+    import secrets
     with app.app_context():
         db.create_all()
         if not User.query.filter_by(username='admin').first():
+            # Generate a strong random password on first boot
+            first_boot_password = secrets.token_urlsafe(16)
             admin = User(username='admin', role='admin', oauth_provider='local')
-            admin.set_password('Admin@1234')
+            admin.set_password(first_boot_password)
             admin.generate_totp_secret()
             db.session.add(admin)
             db.session.commit()
-            print("Default admin created — username: admin / password: Admin@1234")
+            print("="*60)
+            print(f"[DocuVault] Admin account created.")
+            print(f"  Username : admin")
+            print(f"  Password : {first_boot_password}")
+            print(f"  TOTP URI : {admin.get_totp_uri()}")
+            print("  Save these credentials — this message won't appear again.")
+            print("="*60)

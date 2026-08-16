@@ -18,16 +18,22 @@ logger = logging.getLogger(__name__)
 def ensure_wallet_key(user: User, password: str | None = None) -> WalletKey:
     """
     Ensure a WalletKey exists for the user.
-    If not, generate keypair and encrypt private key with provided password (or default).
+    If not, generate keypair and encrypt private key with provided password.
+    Raises ValueError if no password is supplied for a new key.
     """
     wk = WalletKey.query.filter_by(user_id=user.id).first()
     if wk:
         return wk
-        
+
+    if not password:
+        raise ValueError(
+            "Cannot create a wallet key without a password. "
+            "Please supply the user's wallet password."
+        )
+
     pub_pem, priv_pem = wallet.generate_keypair()
-    pwd = password or "DefaultWalletPass123!"
-    enc_priv, salt_hex = wallet.encrypt_private_key(priv_pem, pwd)
-    
+    enc_priv, salt_hex = wallet.encrypt_private_key(priv_pem, password)
+
     wk = WalletKey(
         user_id=user.id,
         public_key_pem=pub_pem,
@@ -36,7 +42,7 @@ def ensure_wallet_key(user: User, password: str | None = None) -> WalletKey:
     )
     db.session.add(wk)
     db.session.commit()
-    logger.info(f"Auto-provisioned WalletKey for user {user.username}")
+    logger.info(f"Provisioned WalletKey for user {user.username}")
     return wk
 
 def issue_to_wallet(owner_user: User, issuer_username: str, file_bytes: bytes, filename: str, doc_type: str) -> Document:
@@ -69,29 +75,27 @@ def issue_to_wallet(owner_user: User, issuer_username: str, file_bytes: bytes, f
 
 def get_user_private_key(user: User, password: str | None = None) -> str:
     """
-    Retrieve and decrypt user's RSA private key.
-    Tries provided password, 'DefaultWalletPass123!', and standard candidate passwords.
-    Works seamlessly for both local accounts and Google SSO accounts.
+    Retrieve and decrypt user's RSA private key using the supplied password.
+    Raises ValueError if the password is wrong or the wallet key doesn't exist.
     """
     wk = WalletKey.query.filter_by(user_id=user.id).first()
     if not wk:
-        wk = ensure_wallet_key(user, password)
+        raise ValueError(
+            f"No wallet key found for user '{user.username}'. "
+            "Ask them to set up their wallet first."
+        )
 
-    candidates = []
-    if password and password.strip():
-        candidates.append(password.strip())
-    candidates.extend([
-        "DefaultWalletPass123!",
-        "Admin@1234", "Ru1807#$", "Rudra@1807", "IIT@DocuVault1", "Verify@1234", "admin123", "password", "123456"
-    ])
+    if not password or not password.strip():
+        raise ValueError(
+            "Wallet password is required to access the private key."
+        )
 
-    for pwd in candidates:
-        try:
-            return wallet.decrypt_private_key(wk.encrypted_private_key, wk.kdf_salt, pwd)
-        except ValueError:
-            continue
-
-    raise ValueError("Could not decrypt wallet private key. Password invalid or key missing.")
+    try:
+        return wallet.decrypt_private_key(wk.encrypted_private_key, wk.kdf_salt, password.strip())
+    except ValueError:
+        raise ValueError(
+            "Incorrect wallet password — could not decrypt private key."
+        )
 
 
 def grant_access(owner_user: User, document: Document, grantee_user: User, expires_at: datetime, owner_password: str | None = None) -> AccessGrant:

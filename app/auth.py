@@ -17,6 +17,20 @@ import logging
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
 
+# Rate limiter — imported lazily so the app still boots without Flask-Limiter
+try:
+    from . import limiter as _limiter
+    _RATE_LIMIT = '5 per 15 minutes'
+except ImportError:
+    _limiter = None
+    _RATE_LIMIT = None
+
+def _apply_limit(f):
+    """Conditionally apply rate limit if Flask-Limiter is available."""
+    if _limiter and _RATE_LIMIT:
+        return _limiter.limit(_RATE_LIMIT)(f)
+    return f
+
 
 # ── Decorators ────────────────────────────────────────────────────────────────
 
@@ -57,6 +71,7 @@ def make_qr_base64(uri):
 # ── Local auth ────────────────────────────────────────────────────────────────
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@_apply_limit
 def login():
     if 'user_id' in session:
         return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
@@ -69,37 +84,29 @@ def login():
             flash('Please enter both username and password', 'error')
             return render_template('login.html')
 
-        # Case-insensitive username lookup
+        # Case-insensitive username lookup — no auto-creation
         user = User.query.filter(db.func.lower(User.username) == username.lower()).first()
         if not user:
-            logger.info(f'User {username!r} not found — creating new local account...')
-            role = 'admin' if username.lower() in ['admin', 'rudra'] else 'verifier'
-            user = User(username=username, role=role, oauth_provider='local')
-            user.set_password(password)
-            user.generate_totp_secret()
-            try:
-                db.session.add(user)
-                db.session.commit()
-                logger.info(f'Auto-created user {username!r} with role={role!r}')
-            except Exception as e:
-                db.session.rollback()
-                logger.error(f'Failed to create user {username!r}: {e}')
-                flash('Error creating account', 'error')
-                return render_template('login.html')
+            logger.warning(f'Login failed: unknown username {username!r}')
+            flash('Invalid credentials', 'error')
+            return render_template('login.html')
 
         if not user.check_password(password):
             logger.warning(f'Login failed: wrong password for {username!r}')
-            flash('Invalid credentials — incorrect password', 'error')
-        else:
-            session['user_id'] = user.id
-            session['role'] = user.role
-            session['username'] = user.username
-            logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
-            return redirect(url_for('auth.verify_2fa'))
+            flash('Invalid credentials', 'error')
+            return render_template('login.html')
+
+        session['user_id'] = user.id
+        session['role'] = user.role
+        session['username'] = user.username
+        logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
+        return redirect(url_for('auth.verify_2fa'))
     return render_template('login.html')
 
 
+
 @auth_bp.route('/verify_2fa', methods=['GET', 'POST'])
+@_apply_limit
 def verify_2fa():
     if 'user_id' not in session:
         return redirect(url_for('auth.login'))
