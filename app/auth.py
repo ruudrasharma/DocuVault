@@ -20,7 +20,7 @@ auth_bp = Blueprint('auth', __name__)
 # Rate limiter — imported lazily so the app still boots without Flask-Limiter
 try:
     from . import limiter as _limiter
-    _RATE_LIMIT = '5 per 15 minutes'
+    _RATE_LIMIT = os.environ.get('AUTH_RATE_LIMIT', '60 per minute')
 except ImportError:
     _limiter = None
     _RATE_LIMIT = None
@@ -30,6 +30,7 @@ def _apply_limit(f):
     if _limiter and _RATE_LIMIT:
         return _limiter.limit(_RATE_LIMIT)(f)
     return f
+
 
 
 # ── Decorators ────────────────────────────────────────────────────────────────
