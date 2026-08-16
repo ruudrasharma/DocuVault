@@ -68,11 +68,13 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_prefix=1)
 # ── CSRF Protection ────────────────────────────────────────────────────────────
 try:
     from flask_wtf.csrf import CSRFProtect
+    app.config['WTF_CSRF_CHECK_DEFAULT'] = False
     csrf = CSRFProtect(app)
-    logger.info("CSRF protection enabled")
+    logger.info("CSRF protection configured")
 except ImportError:
     csrf = None
     logger.warning("Flask-WTF not installed — CSRF protection disabled. Run: pip install Flask-WTF")
+
 
 # ── Rate Limiting ──────────────────────────────────────────────────────────────
 try:
