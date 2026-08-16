@@ -553,15 +553,23 @@
               <label class="form-label">Role</label>
               <select id="new-role" class="form-input" style="padding-left:16px">
                 <option value="institution">Institution</option>
+                <option value="verifier">Verifier</option>
+                <option value="citizen">Citizen</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
             <div id="create-err" class="flash-msg flash-error" style="display:none"></div>
-            <button id="create-btn" onclick="adminInitAccount()" class="btn-primary">
-              ⟶ GENERATE 2FA SETUP
-            </button>
+            <div style="display:flex;gap:10px">
+              <button id="direct-create-btn" onclick="adminDirectCreateAccount()" class="btn-action btn-green" style="flex:1;justify-content:center;padding:12px">
+                ⚡ INSTANT CREATE
+              </button>
+              <button id="create-btn" onclick="adminInitAccount()" class="btn-primary" style="flex:1;justify-content:center">
+                ⟶ 2FA QR SETUP
+              </button>
+            </div>
           </div>
         </div>
+
 
         <!-- Step 2: QR + OTP -->
         <div id="admin-step-2" style="display:none">
@@ -1027,6 +1035,25 @@ function openAdminPanel(){document.getElementById('admin-panel-overlay').style.d
 function closeAdminPanel(){document.getElementById('admin-panel-overlay').style.display='none';}
 function showStep1(){['admin-step-1','admin-step-2','admin-step-3'].forEach((id,i)=>document.getElementById(id).style.display=i===0?'block':'none');document.getElementById('create-err').style.display='none';document.getElementById('new-username').value='';document.getElementById('new-password').value='';_pendingId=null;}
 
+async function adminDirectCreateAccount(){
+  const btn=document.getElementById('direct-create-btn'),errEl=document.getElementById('create-err');
+  const username=document.getElementById('new-username').value.trim();
+  const password=document.getElementById('new-password').value;
+  const role=document.getElementById('new-role').value;
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Enter username and password.';errEl.style.display='flex';return;}
+  btn.innerHTML='▶ CREATING…';btn.disabled=true;
+  try{
+    const res=await fetch('/admin/direct-create-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role})});
+    const data=await res.json();
+    if(!res.ok){errEl.textContent=data.error||'Creation failed.';errEl.style.display='flex';return;}
+    document.getElementById('success-msg').textContent=`"${data.user.username}" (${data.user.role}) has been created.\nTOTP Key: ${data.user.totp_secret}`;
+    document.getElementById('admin-step-1').style.display='none';document.getElementById('admin-step-3').style.display='block';
+    loadUserList();
+  }catch(e){errEl.textContent='Network error.';errEl.style.display='flex';}
+  finally{btn.innerHTML='⚡ INSTANT CREATE';btn.disabled=false;}
+}
+
 async function adminInitAccount(){
   const btn=document.getElementById('create-btn'),errEl=document.getElementById('create-err');
   errEl.style.display='none';btn.innerHTML='▶ GENERATING…';btn.disabled=true;
@@ -1041,7 +1068,7 @@ async function adminInitAccount(){
     document.getElementById('otp-input').value='';document.getElementById('otp-err').style.display='none';
     document.getElementById('admin-step-1').style.display='none';document.getElementById('admin-step-2').style.display='block';
   }catch(e){errEl.textContent='Network error.';errEl.style.display='flex';}
-  finally{btn.innerHTML='⟶ GENERATE 2FA SETUP';btn.disabled=false;}
+  finally{btn.innerHTML='⟶ 2FA QR SETUP';btn.disabled=false;}
 }
 
 async function adminConfirmAccount(){
@@ -1072,9 +1099,25 @@ async function loadUserList(){
   el.innerHTML='<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px;font-family:var(--font-mono)">Loading…</div>';
   try{
     const res=await fetch('/admin/users');const users=await res.json();
-    const rc={admin:'#F87171',institution:'#FCD34D',verifier:'#00D4FF'};
-    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.02);border-radius:var(--r-md);border:1px solid var(--border);transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(0,212,255,0.2)'" onmouseout="this.style.borderColor='var(--border)'"><div style="width:34px;height:34px;border-radius:10px;background:${rc[u.role]||'#6B7280'}18;border:1px solid ${rc[u.role]||'#6B7280'}40;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${rc[u.role]||'#6B7280'};font-family:var(--font-mono)">${u.role==='admin'?'AD':u.role==='institution'?'IN':'VR'}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:10px;color:var(--text-muted)">${u.provider==='google'?'Google OAuth':'Local Auth'} · <span style="color:${rc[u.role]||'#6B7280'};font-weight:600;text-transform:uppercase;letter-spacing:0.05em">${u.role}</span></div></div><button onclick="deleteUser(${u.id},'${u.username}')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:6px;padding:4px 10px;color:#F87171;font-size:10px;cursor:pointer;font-family:var(--font-mono);transition:all 0.2s" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='rgba(248,113,113,0.08)'">DELETE</button></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px;font-family:var(--font-mono)">No accounts found.</div>';
+    const rc={admin:'#F87171',institution:'#FCD34D',verifier:'#00D4FF',citizen:'#A78BFA'};
+    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.02);border-radius:var(--r-md);border:1px solid var(--border);transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(0,212,255,0.2)'" onmouseout="this.style.borderColor='var(--border)'"><div style="width:34px;height:34px;border-radius:10px;background:${rc[u.role]||'#6B7280'}18;border:1px solid ${rc[u.role]||'#6B7280'}40;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${rc[u.role]||'#6B7280'};font-family:var(--font-mono)">${(u.role||'US').substring(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:10px;color:var(--text-muted)">${u.provider==='google'?'Google OAuth':'Local Auth'} · <span style="color:${rc[u.role]||'#6B7280'};font-weight:600;text-transform:uppercase;letter-spacing:0.05em">${u.role}</span></div></div><div style="display:flex;gap:6px"><button onclick="adminResetPwPrompt(${u.id},'${u.username}')" style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);border-radius:6px;padding:4px 8px;color:var(--cyan);font-size:10px;cursor:pointer;font-family:var(--font-mono)">RESET PW</button><button onclick="deleteUser(${u.id},'${u.username}')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:6px;padding:4px 10px;color:#F87171;font-size:10px;cursor:pointer;font-family:var(--font-mono);transition:all 0.2s">DELETE</button></div></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px;font-family:var(--font-mono)">No accounts found.</div>';
   }catch(e){el.innerHTML='<div class="flash-msg flash-error" style="margin:0">Failed to load.</div>';}
+}
+
+async function adminResetPwPrompt(id, username){
+  const newPw = prompt(`Enter new password for ${username} (min 6 characters):`);
+  if(!newPw) return;
+  if(newPw.length < 6) { alert('Password must be at least 6 characters.'); return; }
+  try {
+    const res = await fetch(`/admin/reset-password/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: newPw })
+    });
+    const data = await res.json();
+    if(res.ok) alert(data.message || 'Password reset successfully.');
+    else alert(data.error || 'Failed to reset password.');
+  } catch(e) { alert('Network error'); }
 }
 
 async function deleteUser(id,username){
@@ -1083,6 +1126,7 @@ async function deleteUser(id,username){
   const data=await res.json();
   if(res.ok) loadUserList(); else alert(data.error||'Delete failed.');
 }
+
 
 // ── Init ───────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', initDashboard);

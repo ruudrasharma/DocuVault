@@ -239,6 +239,42 @@
             color: #fff;
         }
 
+        /* Forms */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .form-input {
+            background: #090c10;
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 0.6rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-family: var(--font-mono);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+        }
+
         /* Table */
         .table-responsive {
             overflow-x: auto;
@@ -338,6 +374,7 @@
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="nav-tab active" onclick="switchTab('overview')"><i class="fa-solid fa-gauge-high"></i> Overview</div>
+            <div class="nav-tab" onclick="switchTab('users')"><i class="fa-solid fa-users-gear"></i> User Management</div>
             <div class="nav-tab" onclick="switchTab('audit')"><i class="fa-solid fa-list-check"></i> Audit Logs</div>
             <div class="nav-tab" onclick="switchTab('database')"><i class="fa-solid fa-database"></i> Database Explorer</div>
             <div class="nav-tab" onclick="switchTab('blockchain')"><i class="fa-solid fa-link"></i> Blockchain Deep-Scan</div>
@@ -386,6 +423,72 @@
                             <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.25rem;">Post-Quantum Cryptography Mode</div>
                             <div class="badge-status status-verified"><i class="fa-solid fa-atom"></i> ML-KEM-768 (Kyber) ACTIVE</div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- USERS MANAGEMENT TAB -->
+            <section id="tab-users" style="display: none;">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title"><i class="fa-solid fa-user-plus" style="color: var(--accent-gold);"></i> Provision New Account</div>
+                    </div>
+                    <form id="create-user-form" onsubmit="handleCreateUser(event)">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Username</label>
+                                <input type="text" id="nu-username" class="form-input" placeholder="e.g. john_doe" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Password</label>
+                                <input type="password" id="nu-password" class="form-input" placeholder="Min 6 characters" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Role</label>
+                                <select id="nu-role" class="form-input">
+                                    <option value="verifier">Verifier</option>
+                                    <option value="citizen">Citizen</option>
+                                    <option value="institution">Institution</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="superadmin">Superadmin</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Linked Google Email (Optional)</label>
+                                <input type="email" id="nu-email" class="form-input" placeholder="user@gmail.com">
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--accent-gold); cursor: pointer;">
+                                <input type="checkbox" id="nu-protected"> Enable Root Protection (Immutable against deletion)
+                            </label>
+                            <button type="submit" class="btn-action btn-gold"><i class="fa-solid fa-check"></i> Provision Account</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title"><i class="fa-solid fa-users" style="color: var(--accent-cyan);"></i> Active Accounts Roster</div>
+                        <button class="btn-action" onclick="loadUsersTable()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Protection</th>
+                                    <th>Provider</th>
+                                    <th>Linked Email</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body">
+                                <tr><td colspan="7" style="text-align: center;">Loading users...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -503,6 +606,20 @@
         </div>
     </div>
 
+    <!-- Reset Password Modal -->
+    <div id="reset-pw-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: var(--accent-gold); margin-bottom: 1rem;"><i class="fa-solid fa-key"></i> Reset User Password</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Setting new password for: <strong id="rp-username-display" style="color:#fff;"></strong></p>
+            <input type="hidden" id="rp-user-id">
+            <input type="password" id="rp-new-password" placeholder="Enter new password (min 6 chars)" class="form-input" style="width: 100%; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button class="btn-action" onclick="closeResetPwModal()">Cancel</button>
+                <button class="btn-action btn-gold" onclick="submitResetPassword()">Update Password</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let pendingActionCallback = null;
 
@@ -513,6 +630,7 @@
             event.currentTarget.classList.add('active');
             document.getElementById('tab-' + tabId).style.display = 'block';
 
+            if (tabId === 'users') loadUsersTable();
             if (tabId === 'audit') loadAuditLogs();
             if (tabId === 'database') loadDatabaseTable();
             if (tabId === 'blockchain') loadBlockchainData();
@@ -530,6 +648,94 @@
                 document.getElementById('server-clock').innerHTML = `<i class="fa-regular fa-clock"></i> ${data.server_time}`;
             } catch (err) {
                 console.error(err);
+            }
+        }
+
+        async function loadUsersTable() {
+            const res = await fetch('/superadmin/database?table=users&limit=100');
+            const data = await res.json();
+            const tbody = document.getElementById('users-table-body');
+            tbody.innerHTML = data.rows.map(u => `
+                <tr>
+                    <td class="code-snippet">#${u.id}</td>
+                    <td><strong>${u.username}</strong></td>
+                    <td><span class="badge-status status-verified" style="text-transform:uppercase;">${u.role}</span></td>
+                    <td>${u.is_protected ? '<span class="badge-status status-protected"><i class="fa-solid fa-lock"></i> PROTECTED</span>' : '<span style="color:var(--text-muted);">Standard</span>'}</td>
+                    <td>${u.oauth_provider === 'google' ? '<i class="fa-brands fa-google" style="color:#ea4335;"></i> Google' : 'Local Auth'}</td>
+                    <td style="font-size:0.8rem; color:var(--text-muted);">${u.google_email}</td>
+                    <td style="display: flex; gap: 0.4rem;">
+                        <button class="btn-action" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="promptResetPassword(${u.id}, '${u.username}')">
+                            <i class="fa-solid fa-key"></i> Reset PW
+                        </button>
+                        <button class="btn-action" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="toggleProtection(${u.id})">
+                            <i class="fa-solid fa-shield"></i> ${u.is_protected ? 'Unprotect' : 'Protect'}
+                        </button>
+                        ${!u.is_protected ? `<button class="btn-action" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:var(--accent-red);" onclick="deleteUserRow(${u.id})"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function handleCreateUser(e) {
+            e.preventDefault();
+            const payload = {
+                username: document.getElementById('nu-username').value.trim(),
+                password: document.getElementById('nu-password').value,
+                role: document.getElementById('nu-role').value,
+                email: document.getElementById('nu-email').value.trim(),
+                is_protected: document.getElementById('nu-protected').checked
+            };
+
+            const res = await fetch('/superadmin/create-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.error === 'STEPUP_2FA_REQUIRED') {
+                promptStepup2FA(() => handleCreateUser(e));
+                return;
+            }
+            if (data.success) {
+                alert(`Account created successfully!\n\nUsername: ${data.user.username}\nRole: ${data.user.role}\nTOTP Secret: ${data.user.totp_secret}`);
+                document.getElementById('create-user-form').reset();
+                loadUsersTable();
+                loadStats();
+            } else {
+                alert(data.error || 'Failed to create user');
+            }
+        }
+
+        function promptResetPassword(userId, username) {
+            document.getElementById('rp-user-id').value = userId;
+            document.getElementById('rp-username-display').innerText = username;
+            document.getElementById('rp-new-password').value = '';
+            document.getElementById('reset-pw-modal').style.display = 'flex';
+            document.getElementById('rp-new-password').focus();
+        }
+
+        function closeResetPwModal() {
+            document.getElementById('reset-pw-modal').style.display = 'none';
+        }
+
+        async function submitResetPassword() {
+            const userId = document.getElementById('rp-user-id').value;
+            const newPassword = document.getElementById('rp-new-password').value;
+            const res = await fetch('/superadmin/database/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reset_password', table: 'users', id: userId, new_password: newPassword })
+            });
+            const data = await res.json();
+            if (data.error === 'STEPUP_2FA_REQUIRED') {
+                promptStepup2FA(() => submitResetPassword());
+                return;
+            }
+            if (data.success) {
+                alert(data.message);
+                closeResetPwModal();
+            } else {
+                alert(data.error || 'Failed to reset password');
             }
         }
 
@@ -635,7 +841,11 @@
                 promptStepup2FA(() => toggleProtection(userId));
                 return;
             }
-            loadDatabaseTable();
+            if (document.getElementById('tab-users').style.display !== 'none') {
+                loadUsersTable();
+            } else {
+                loadDatabaseTable();
+            }
             loadStats();
         }
 
@@ -651,7 +861,11 @@
                 promptStepup2FA(() => deleteUserRow(userId));
                 return;
             }
-            loadDatabaseTable();
+            if (document.getElementById('tab-users').style.display !== 'none') {
+                loadUsersTable();
+            } else {
+                loadDatabaseTable();
+            }
             loadStats();
         }
 

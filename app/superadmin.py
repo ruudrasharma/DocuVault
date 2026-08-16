@@ -209,7 +209,68 @@ def database_action():
             log_audit('TOGGLE_USER_PROTECTION', f'user:{user.id}:{user.username}', {'new_is_protected': user.is_protected})
             return jsonify({'success': True, 'is_protected': user.is_protected})
 
+        elif action == 'reset_password':
+            new_password = data.get('new_password', '')
+            if not new_password or len(new_password) < 6:
+                return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+            user.set_password(new_password)
+            db.session.commit()
+            log_audit('SUPERADMIN_RESET_PASSWORD', f'user:{user.id}:{user.username}', {'username': user.username})
+            return jsonify({'success': True, 'message': f'Password for {user.username} has been reset.'})
+
     return jsonify({'error': f'Unsupported action {action} on {target_table}.'}), 400
+
+
+@superadmin_bp.route('/create-user', methods=['POST'])
+@login_required
+@role_required('superadmin')
+@reverify_2fa
+def superadmin_create_user():
+    """Superadmin provisions any role (including superadmin) with optional root protection."""
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    role = data.get('role', 'verifier')
+    email = data.get('email', '').strip()
+    is_protected = bool(data.get('is_protected', False))
+
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required.'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+    if role not in ('superadmin', 'admin', 'institution', 'verifier', 'citizen'):
+        return jsonify({'error': 'Invalid role.'}), 400
+
+    if User.query.filter((db.func.lower(User.username) == username.lower())).first():
+        return jsonify({'error': f'Username "{username}" is already taken.'}), 409
+
+    user = User(
+        username=username,
+        role=role,
+        oauth_provider='local',
+        google_email=email or None,
+        is_protected=is_protected
+    )
+    user.set_password(password)
+    user.generate_totp_secret()
+    db.session.add(user)
+    db.session.commit()
+
+    log_audit('SUPERADMIN_CREATE_USER', f'user:{username}', {'role': role, 'is_protected': is_protected, 'email': email})
+
+    return jsonify({
+        'success': True,
+        'message': f'User {username} ({role}) created successfully.',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'role': user.role,
+            'is_protected': user.is_protected,
+            'totp_secret': user.totp_secret,
+            'totp_uri': user.get_totp_uri()
+        }
+    })
+
 
 
 # ── Blockchain Deep-Inspector ────────────────────────────────────────────────

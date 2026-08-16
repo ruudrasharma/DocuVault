@@ -20,16 +20,27 @@ auth_bp = Blueprint('auth', __name__)
 # Rate limiter — imported lazily so the app still boots without Flask-Limiter
 try:
     from . import limiter as _limiter
-    _RATE_LIMIT = os.environ.get('AUTH_RATE_LIMIT', '60 per minute')
 except ImportError:
     _limiter = None
-    _RATE_LIMIT = None
 
 def _apply_limit(f):
-    """Conditionally apply rate limit if Flask-Limiter is available."""
-    if _limiter and _RATE_LIMIT:
-        return _limiter.limit(_RATE_LIMIT)(f)
+    """
+    Conditionally apply rate limits:
+    - Superadmin & Admin: ZERO rate limits (completely exempt)
+    - Institution & Verifier: High volume capacity (5000/minute)
+    - General unauthenticated: 200/minute
+    """
+    if _limiter:
+        def dynamic_rate_limit():
+            user_role = session.get('role')
+            if user_role in ('admin', 'superadmin'):
+                return None  # Exempt from all rate limits
+            elif user_role in ('institution', 'verifier'):
+                return '5000 per minute'
+            return '200 per minute'
+        return _limiter.limit(dynamic_rate_limit)(f)
     return f
+
 
 
 
@@ -450,6 +461,96 @@ def admin_users():
         'is_protected': getattr(u, 'is_protected', False),
     } for u in filtered])
 
+
+
+@auth_bp.route('/admin/direct-create-user', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_direct_create_user():
+    """Admin directly provisions an account with username, password, and role."""
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    role = data.get('role', 'verifier')
+    email = data.get('email', '').strip()
+
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required.'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+    if role not in ('admin', 'institution', 'verifier', 'citizen'):
+        return jsonify({'error': 'Invalid role. Choose admin, institution, verifier, or citizen.'}), 400
+
+    if User.query.filter((db.func.lower(User.username) == username.lower())).first():
+        return jsonify({'error': f'Username "{username}" is already taken.'}), 409
+
+    user = User(
+        username=username,
+        role=role,
+        oauth_provider='local',
+        google_email=email or None,
+        is_protected=False
+    )
+    user.set_password(password)
+    user.generate_totp_secret()
+    db.session.add(user)
+
+    from .database import AuditLog
+    audit = AuditLog(
+        actor_id=session.get('user_id'),
+        actor_username=session.get('username', 'admin'),
+        action='CREATE_USER',
+        target=f'user:{username}',
+        ip_address=request.remote_addr,
+        details_json=f'{{"username": "{username}", "role": "{role}"}}'
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'User {username} ({role}) created successfully.',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'role': user.role,
+            'totp_secret': user.totp_secret,
+            'totp_uri': user.get_totp_uri()
+        }
+    })
+
+
+@auth_bp.route('/admin/reset-password/<int:user_id>', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_reset_password(user_id):
+    """Admin resets password for any non-protected user account."""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+
+    if getattr(user, 'is_protected', False) or user.role == 'superadmin':
+        return jsonify({'error': 'Protected accounts cannot be modified.'}), 403
+
+    data = request.get_json() or {}
+    new_password = data.get('new_password', '')
+    if not new_password or len(new_password) < 6:
+        return jsonify({'error': 'New password must be at least 6 characters.'}), 400
+
+    user.set_password(new_password)
+    from .database import AuditLog
+    audit = AuditLog(
+        actor_id=session.get('user_id'),
+        actor_username=session.get('username', 'admin'),
+        action='RESET_USER_PASSWORD',
+        target=f'user:{user.id}:{user.username}',
+        ip_address=request.remote_addr,
+        details_json=f'{{"username": "{user.username}"}}'
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': f'Password for {user.username} has been reset successfully.'})
 
 
 @auth_bp.route('/admin/delete-user/<int:user_id>', methods=['POST', 'DELETE'])
