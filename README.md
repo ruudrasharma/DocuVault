@@ -509,7 +509,7 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 
-Built by [Rudra Kumar Sharma](https://github.com/ruudrasharma). Uses
+Built by [Rudra Kumar Sharma](https://github.com/ruudrasharma) and Team. Uses
 open-source projects including Flask, EasyOCR, PyTorch, Flower, `py_ecc`,
 and the Open Quantum Safe project's `liboqs`.
 
