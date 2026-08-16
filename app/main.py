@@ -63,7 +63,7 @@ def index():
         if session.get('role') == 'superadmin':
             return redirect(url_for('superadmin.dashboard'))
         return redirect(url_for('main.dashboard', role=session.get('role')))
-    return redirect(url_for('auth.login'))
+    return render_template('login.html', show_splash=True)
 
 
 @main_bp.route('/dashboard/<role>')

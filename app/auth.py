@@ -120,13 +120,23 @@ def login():
     if 'user_id' in session:
         return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
+        is_ajax = request.is_json or 'application/json' in request.headers.get('Accept', '') or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        
+        if request.is_json:
+            data = request.get_json() or {}
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+        else:
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '').strip()
+
         logger.info(f'Login attempt: username={username!r}')
 
         if not username or not password:
+            if is_ajax:
+                return jsonify({'error': 'Please enter both username and password'}), 400
             flash('Please enter both username and password', 'error')
-            return render_template('login.html')
+            return render_template('login.html', show_splash=False)
 
         # Case-insensitive username or email lookup — no auto-creation
         user = User.query.filter(
@@ -135,20 +145,27 @@ def login():
         ).first()
         if not user:
             logger.warning(f'Login failed: unknown username/email {username!r}')
+            if is_ajax:
+                return jsonify({'error': 'Invalid credentials'}), 401
             flash('Invalid credentials', 'error')
-            return render_template('login.html')
+            return render_template('login.html', show_splash=False)
 
         if not user.check_password(password):
             logger.warning(f'Login failed: wrong password for {username!r}')
+            if is_ajax:
+                return jsonify({'error': 'Invalid credentials'}), 401
             flash('Invalid credentials', 'error')
-            return render_template('login.html')
+            return render_template('login.html', show_splash=False)
 
         session['user_id'] = user.id
         session['role'] = user.role
         session['username'] = user.username
         logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
+
+        if is_ajax:
+            return jsonify({'success': True, 'redirect': url_for('auth.verify_2fa')})
         return redirect(url_for('auth.verify_2fa'))
-    return render_template('login.html')
+    return render_template('login.html', show_splash=False)
 
 
 
@@ -212,9 +229,9 @@ def stepup_2fa():
 @auth_bp.route('/logout', methods=['GET', 'POST'])
 def logout():
     session.clear()
-    if request.method == 'POST':
-        return jsonify({'success': True})
-    return redirect(url_for('auth.login'))
+    if request.is_json or (request.headers.get('Accept') == 'application/json' and request.headers.get('X-Requested-With') == 'XMLHttpRequest'):
+        return jsonify({'success': True, 'redirect': '/'})
+    return redirect('/')
 
 
 @auth_bp.route('/get_role')
