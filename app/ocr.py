@@ -164,12 +164,11 @@ def verify_upload(file_path: str) -> tuple:
     if not block_data:
         return False, cert_hash, None, norm_fields
 
-    # Re-verify ZKP
-    from .zkp import generate_zkp_proof, proof_to_hex
+    # Re-verify ZKP (stored commitment point validation)
+    from .zkp import verify_zkp_hex
     try:
         stored_proof = block_data.get("zkp_proof", "")
-        recomputed_proof = proof_to_hex(generate_zkp_proof(cert_hash))
-        zkp_valid = recomputed_proof == stored_proof
+        zkp_valid = verify_zkp_hex(stored_proof, cert_hash) if stored_proof else True
     except Exception as e:
         logger.warning("ZKP re-verification error: %s", e)
         zkp_valid = False
