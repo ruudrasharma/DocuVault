@@ -130,6 +130,17 @@ with app.app_context():
                     logger.info(f'Migrated: added column user.{col}')
                 except Exception:
                     pass  # Column already exists
+
+            for col, definition in [
+                ('pqc_public_key', 'BLOB'),
+                ('pqc_encrypted_private_key', 'BLOB'),
+            ]:
+                try:
+                    conn.execute(text(f'ALTER TABLE wallet_key ADD COLUMN {col} {definition}'))
+                    conn.commit()
+                    logger.info(f'Migrated: added column wallet_key.{col}')
+                except Exception:
+                    pass
     except Exception as e:
         logger.warning(f'Migration check skipped: {e}')
 

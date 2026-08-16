@@ -34,15 +34,23 @@ def ensure_wallet_key(user: User, password: str | None = None) -> WalletKey:
     pub_pem, priv_pem = wallet.generate_keypair()
     enc_priv, salt_hex = wallet.encrypt_private_key(priv_pem, password)
 
+    # Generate PQC (ML-KEM-768 / Kyber) keypair
+    from .pqc import pqc_generate_keypair
+    pqc_pub, pqc_priv = pqc_generate_keypair()
+    salt_bytes = bytes.fromhex(salt_hex)
+    enc_pqc_priv = wallet.encrypt_bytes(pqc_priv, password, salt_bytes)
+
     wk = WalletKey(
         user_id=user.id,
         public_key_pem=pub_pem,
         encrypted_private_key=enc_priv,
-        kdf_salt=salt_hex
+        kdf_salt=salt_hex,
+        pqc_public_key=pqc_pub,
+        pqc_encrypted_private_key=enc_pqc_priv,
     )
     db.session.add(wk)
     db.session.commit()
-    logger.info(f"Provisioned WalletKey for user {user.username}")
+    logger.info(f"Provisioned Dual RSA + PQC WalletKey for user {user.username}")
     return wk
 
 def issue_to_wallet(owner_user: User, issuer_username: str, file_bytes: bytes, filename: str, doc_type: str) -> Document:

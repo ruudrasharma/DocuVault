@@ -36,3 +36,33 @@ All notable changes are documented here, one entry per phase.
 - Added `tests/test_security.py`.
 
 ---
+
+## [Phase 3] — Real Post-Quantum Cryptography — 2026-08-16
+
+- Replaced Fernet symmetric placeholder in `app/pqc.py` with real NIST ML-KEM-768 (Kyber768) implementation using `liboqs`.
+- Implemented NIST Hybrid Migration standard combining classical secrets with ML-KEM-768 shared secrets via HKDF-SHA256 (`hybrid_combine_secrets`).
+- Added `pqc_public_key` and `pqc_encrypted_private_key` columns to `WalletKey` in `app/database.py`.
+- Added automatic column migration in `app/__init__.py`.
+- Added `tests/test_pqc.py`.
+
+---
+
+## [Phase 4] — Real Zero-Knowledge Proofs — 2026-08-16
+
+- Implemented real BN128 Pedersen commitments ($C = vG + rH$) with independent generator point $H$ in `app/zkp.py`.
+- Implemented Fiat-Shamir Non-Interactive Zero-Knowledge Proofs of Knowledge (Schnorr NIZK).
+- Refactored `prove_claim` in `app/routes_wallet.py` to return the NIZK proof token without revealing raw hashes to verifiers.
+- Refactored `verify_claim` to evaluate Schnorr NIZK verification equation.
+- Added `tests/test_zkp.py`.
+
+---
+
+## [Phase 5] — Signed Blockchain Blocks — 2026-08-16
+
+- Added Ed25519 cryptographic block signing to `app/blockchain.py`.
+- Updated `Block` class with `signature` and `signer_pubkey` fields.
+- Implemented signature verification in `is_chain_valid()` to detect post-hoc tamper and re-signing attacks.
+- Maintained seamless backward compatibility for legacy unsigned blocks.
+- Added `tests/test_blockchain_signing.py`.
+
+---

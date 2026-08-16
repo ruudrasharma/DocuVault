@@ -29,27 +29,57 @@ CHAIN_FILE = os.path.join(CHAIN_DIR, "chain.json")
 
 
 class Block:
-    __slots__ = ("index", "previous_hash", "timestamp", "data", "hash")
+    __slots__ = ("index", "previous_hash", "timestamp", "data", "hash", "signature", "signer_pubkey")
 
-    def __init__(self, index, previous_hash, timestamp, data, hash_val):
+    def __init__(self, index, previous_hash, timestamp, data, hash_val, signature=None, signer_pubkey=None):
         self.index         = index
         self.previous_hash = previous_hash
         self.timestamp     = timestamp
         self.data          = data          # str (JSON or bare hash)
         self.hash          = hash_val
+        self.signature     = signature     # hex-encoded Ed25519 signature
+        self.signer_pubkey = signer_pubkey # hex-encoded Ed25519 public key
 
     def to_dict(self):
-        return {
+        d = {
             "index":         self.index,
             "previous_hash": self.previous_hash,
             "timestamp":     self.timestamp,
             "data":          self.data,
             "hash":          self.hash,
         }
+        if self.signature:
+            d["signature"] = self.signature
+        if self.signer_pubkey:
+            d["signer_pubkey"] = self.signer_pubkey
+        return d
 
     @classmethod
     def from_dict(cls, d):
-        return cls(d["index"], d["previous_hash"], d["timestamp"], d["data"], d["hash"])
+        return cls(
+            d["index"],
+            d["previous_hash"],
+            d["timestamp"],
+            d["data"],
+            d["hash"],
+            d.get("signature"),
+            d.get("signer_pubkey")
+        )
+
+    def verify_signature(self) -> bool:
+        """Verifies the block's Ed25519 signature if present."""
+        if not self.signature or not self.signer_pubkey:
+            return True  # Legacy / unsigned block
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+            pub_bytes = bytes.fromhex(self.signer_pubkey)
+            sig_bytes = bytes.fromhex(self.signature)
+            pub = Ed25519PublicKey.from_public_bytes(pub_bytes)
+            msg = f"{self.index}:{self.previous_hash}:{self.timestamp}:{self.data}".encode('utf-8')
+            pub.verify(sig_bytes, msg)
+            return True
+        except Exception:
+            return False
 
     # ── Parse data field ──────────────────────────────────────
     @property
@@ -113,15 +143,30 @@ class Blockchain:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     # ── Write ─────────────────────────────────────────────────
-    def _add_raw(self, data) -> int:
-        """Internal: add any data to chain, return new block index."""
+    def _add_raw(self, data, signer_privkey_bytes: bytes | None = None) -> int:
+        """Internal: add any data to chain, sign if privkey provided, return new block index."""
         prev = self.chain[-1]
         idx  = prev.index + 1
         ts   = time()
         h    = self._hash(idx, prev.hash, ts, data)
-        self.chain.append(Block(idx, prev.hash, ts, data, h))
+        sig_hex = None
+        pub_hex = None
+
+        if signer_privkey_bytes:
+            try:
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+                priv = Ed25519PrivateKey.from_private_bytes(signer_privkey_bytes[:32])
+                pub = priv.public_key()
+                pub_hex = pub.public_bytes_raw().hex()
+                msg = f"{idx}:{prev.hash}:{ts}:{data}".encode('utf-8')
+                sig_hex = priv.sign(msg).hex()
+            except Exception as e:
+                logger.error(f"Failed to sign block #{idx}: {e}")
+
+        block = Block(idx, prev.hash, ts, data, h, signature=sig_hex, signer_pubkey=pub_hex)
+        self.chain.append(block)
         self._save()
-        logger.info("Block #%d added (hash=%s…)", idx, h[:12])
+        logger.info("Block #%d added (hash=%s…, signed=%s)", idx, h[:12], bool(sig_hex))
         return idx
 
     def add_document_block(
@@ -130,9 +175,10 @@ class Blockchain:
         zkp_proof: str,
         issuer: str,
         fields_summary: dict | None = None,
+        signer_privkey: bytes | None = None,
     ) -> int:
         """
-        Add a document record block.
+        Add a document record block, cryptographically signed with institution key.
         Returns the new block index.
         """
         payload = {
@@ -142,22 +188,22 @@ class Blockchain:
             "issued_at":      time(),
             "fields_summary": fields_summary or {},
         }
-        return self._add_raw(json.dumps(payload, sort_keys=True))
+        return self._add_raw(json.dumps(payload, sort_keys=True), signer_privkey_bytes=signer_privkey)
 
-    def add_wallet_issue_block(self, cert_hash: str, owner_username: str, issuer_username: str) -> int:
+    def add_wallet_issue_block(self, cert_hash: str, owner_username: str, issuer_username: str, signer_privkey: bytes | None = None) -> int:
         payload = {"type": "wallet_issue", "cert_hash": cert_hash,
                    "owner": owner_username, "issuer": issuer_username, "ts": time()}
-        return self._add_raw(json.dumps(payload, sort_keys=True))
+        return self._add_raw(json.dumps(payload, sort_keys=True), signer_privkey_bytes=signer_privkey)
 
-    def add_grant_block(self, cert_hash: str, owner_username: str, grantee_username: str, expires_at_ts: float) -> int:
+    def add_grant_block(self, cert_hash: str, owner_username: str, grantee_username: str, expires_at_ts: float, signer_privkey: bytes | None = None) -> int:
         payload = {"type": "grant", "cert_hash": cert_hash, "owner": owner_username,
                    "grantee": grantee_username, "expires_at": expires_at_ts, "ts": time()}
-        return self._add_raw(json.dumps(payload, sort_keys=True))
+        return self._add_raw(json.dumps(payload, sort_keys=True), signer_privkey_bytes=signer_privkey)
 
-    def add_revoke_block(self, cert_hash: str, owner_username: str, grantee_username: str) -> int:
+    def add_revoke_block(self, cert_hash: str, owner_username: str, grantee_username: str, signer_privkey: bytes | None = None) -> int:
         payload = {"type": "revoke", "cert_hash": cert_hash, "owner": owner_username,
                    "grantee": grantee_username, "ts": time()}
-        return self._add_raw(json.dumps(payload, sort_keys=True))
+        return self._add_raw(json.dumps(payload, sort_keys=True), signer_privkey_bytes=signer_privkey)
 
     def get_events_for_hash(self, cert_hash: str) -> list[dict]:
         """All grant/revoke/issue events for this doc, in chain order — this IS the access-control read path."""
@@ -165,7 +211,12 @@ class Blockchain:
         for block in self.chain[1:]:
             pd = block.parsed_data
             if pd and pd.get("cert_hash") == cert_hash and pd.get("type") in ("wallet_issue", "grant", "revoke"):
-                out.append({**pd, "_block_index": block.index})
+                out.append({
+                    **pd,
+                    "_block_index": block.index,
+                    "_is_signed": bool(block.signature),
+                    "_sig_valid": block.verify_signature()
+                })
         return out
 
     # Legacy: old callers that pass a bare hash string
@@ -182,7 +233,13 @@ class Blockchain:
             if block.cert_hash == cert_hash:
                 pd = block.parsed_data
                 if pd:
-                    return {**pd, "_block_index": block.index, "_block_hash": block.hash}
+                    return {
+                        **pd,
+                        "_block_index": block.index,
+                        "_block_hash": block.hash,
+                        "_is_signed": bool(block.signature),
+                        "_sig_valid": block.verify_signature(),
+                    }
                 # Legacy bare-hash block
                 return {
                     "cert_hash":      cert_hash,
@@ -192,6 +249,8 @@ class Blockchain:
                     "fields_summary": {},
                     "_block_index":   block.index,
                     "_block_hash":    block.hash,
+                    "_is_signed":     False,
+                    "_sig_valid":     True,
                 }
         return None
 
@@ -211,6 +270,8 @@ class Blockchain:
                     "_block_index": block.index,
                     "_block_hash":  block.hash,
                     "_timestamp":   block.timestamp,
+                    "_is_signed":   bool(block.signature),
+                    "_sig_valid":   block.verify_signature(),
                 })
             elif block.cert_hash:
                 # Legacy bare-hash block
@@ -223,6 +284,8 @@ class Blockchain:
                     "_block_index":   block.index,
                     "_block_hash":    block.hash,
                     "_timestamp":     block.timestamp,
+                    "_is_signed":     False,
+                    "_sig_valid":     True,
                 })
         return list(reversed(results))  # newest first
 
@@ -236,16 +299,22 @@ class Blockchain:
             expected = self._hash(cur.index, cur.previous_hash, cur.timestamp, cur.data)
             if cur.hash != expected:
                 return False
+            if not cur.verify_signature():
+                logger.warning(f"Block #{cur.index} cryptographic signature verification failed!")
+                return False
         return True
 
     def stats(self) -> dict:
         doc_blocks = [b for b in self.chain[1:] if b.cert_hash]
+        signed_blocks = [b for b in self.chain[1:] if b.signature]
         return {
             "total_blocks":     len(self.chain),
             "document_blocks":  len(doc_blocks),
+            "signed_blocks":    len(signed_blocks),
             "chain_valid":      self.is_chain_valid(),
             "latest_hash":      self.chain[-1].hash if self.chain else None,
         }
 
 
 blockchain = Blockchain()
+

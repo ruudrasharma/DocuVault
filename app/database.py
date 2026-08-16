@@ -113,8 +113,12 @@ class WalletKey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
     public_key_pem = db.Column(db.Text, nullable=False)
-    encrypted_private_key = db.Column(db.Text, nullable=False)  # private key encrypted w/ password-derived key
+    encrypted_private_key = db.Column(db.Text, nullable=False)  # RSA private key encrypted w/ password-derived key
     kdf_salt = db.Column(db.String(64), nullable=False)
+    # Post-Quantum Cryptography (ML-KEM-768 / Kyber) fields
+    pqc_public_key = db.Column(db.LargeBinary, nullable=True)
+    pqc_encrypted_private_key = db.Column(db.LargeBinary, nullable=True)
+
 
 
 @login_manager.user_loader

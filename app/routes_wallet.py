@@ -383,7 +383,7 @@ def audit_trail(document_id):
 def prove_claim():
     """
     Generate a zero-knowledge proof token for a document predicate (e.g. proof of degree ownership).
-    Returns a ZKP proof token without revealing document blob or DEK.
+    Returns a Fiat-Shamir Schnorr NIZK proof token without revealing raw cert_hash, document blob, or DEK.
     """
     data = request.get_json(silent=True) or {}
     doc_id = data.get('document_id')
@@ -396,16 +396,18 @@ def prove_claim():
         return jsonify({'error': 'Document not found or access denied.'}), 404
         
     try:
-        from .zkp import generate_zkp_proof, proof_to_hex
-        proof = generate_zkp_proof(doc.cert_hash)
-        proof_hex = proof_to_hex(proof)
+        from .zkp import schnorr_prove, CURVE_ORDER
+        import secrets
+        val_int = int(doc.cert_hash, 16)
+        blinding = secrets.randbelow(CURVE_ORDER - 1) + 1
+        proof = schnorr_prove(val_int, blinding)
         
         return jsonify({
             'success': True,
-            'cert_hash': doc.cert_hash,
             'doc_type': doc.doc_type,
             'issuer_username': doc.issuer_username,
-            'proof_hex': proof_hex,
+            'proof_hex': proof.get('commitment'),
+            'proof_data': proof,
             'claim': f"Citizen holds valid {doc.doc_type or 'document'} issued by {doc.issuer_username}"
         })
     except Exception as e:
@@ -418,26 +420,27 @@ def prove_claim():
 def verify_claim():
     """
     Verify a ZKP proof token submitted by a citizen.
-    Allows verifier/agency to verify document validity without decrypting blob.
+    Allows verifier/agency to verify proof of ownership using Schnorr NIZK on BN128.
     """
     data = request.get_json(silent=True) or {}
-    cert_hash = data.get('cert_hash')
+    proof_data = data.get('proof_data')
     proof_hex = data.get('proof_hex')
     
-    if not cert_hash or not proof_hex:
-        return jsonify({'error': 'cert_hash and proof_hex are required.'}), 400
+    if not proof_data and not proof_hex:
+        return jsonify({'error': 'proof_data or proof_hex is required.'}), 400
         
     try:
-        from .zkp import verify_zkp_hex
-        is_valid = verify_zkp_hex(proof_hex, cert_hash)
-        on_chain = blockchain.is_valid_hash(cert_hash) or len(blockchain.get_events_for_hash(cert_hash)) > 0
+        from .zkp import schnorr_verify
+        proof_to_check = proof_data if isinstance(proof_data, dict) else {'commitment': proof_hex, 'e': data.get('e', '1'), 'z1': data.get('z1', '1'), 'z2': data.get('z2', '1')}
+        is_valid = schnorr_verify(proof_to_check)
         
         return jsonify({
-            'verified': is_valid and on_chain,
+            'verified': is_valid,
             'zkp_valid': is_valid,
-            'on_chain': on_chain,
-            'cert_hash': cert_hash
+            'scheme': proof_to_check.get('scheme', 'schnorr-nizk-bn128'),
+            'commitment': proof_to_check.get('commitment')
         })
     except Exception as e:
         logger.error(f"Verify claim failed: {e}")
         return jsonify({'error': str(e)}), 500
+

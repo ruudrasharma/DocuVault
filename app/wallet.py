@@ -78,6 +78,22 @@ def decrypt_private_key(ciphertext_b64: str, salt_hex: str, password: str) -> st
     except Exception as exc:
         raise ValueError("Invalid password or corrupted key storage.") from exc
 
+def encrypt_bytes(data_bytes: bytes, password: str, salt: bytes) -> bytes:
+    """Encrypt raw bytes using a password-derived key and AES-GCM. Returns nonce + ciphertext."""
+    key = derive_key_from_password(password, salt)
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, data_bytes, None)
+    return nonce + ciphertext
+
+def decrypt_bytes(payload: bytes, password: str, salt: bytes) -> bytes:
+    """Decrypt payload (nonce + ciphertext) using a password-derived key."""
+    key = derive_key_from_password(password, salt)
+    aesgcm = AESGCM(key)
+    nonce = payload[:12]
+    ciphertext = payload[12:]
+    return aesgcm.decrypt(nonce, ciphertext, None)
+
 def wrap_dek(dek: bytes, public_pem: str) -> str:
     """Wrap a DEK (Data Encryption Key) using recipient's public key (RSA-OAEP). Returns b64."""
     public_key = serialization.load_pem_public_key(public_pem.encode('utf-8'))
@@ -104,3 +120,4 @@ def unwrap_dek(wrapped_b64: str, private_pem: str) -> bytes:
         )
     )
     return dek
+
