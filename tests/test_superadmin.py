@@ -46,12 +46,19 @@ def test_protected_account_cannot_be_deleted(app, client):
 def test_superadmin_hidden_from_ordinary_admin_list(app, client):
     """admin_users endpoint excludes accounts with role='superadmin' or is_protected=True."""
     with app.app_context():
-        # Ensure a normal user exists
-        if not User.query.filter_by(username='ordinary_verifier').first():
-            u = User(username='ordinary_verifier', role='verifier', oauth_provider='local', is_protected=False)
-            u.set_password('Pass@1234')
-            db.session.add(u)
-            db.session.commit()
+        # Ensure a superadmin and a normal verifier exist
+        sa = User.query.filter_by(username='explicit_superadmin').first()
+        if not sa:
+            sa = User(username='explicit_superadmin', role='superadmin', is_protected=True)
+            sa.set_password('SuperPass@999')
+            db.session.add(sa)
+        
+        ov = User.query.filter_by(username='ordinary_verifier').first()
+        if not ov:
+            ov = User(username='ordinary_verifier', role='verifier', is_protected=False)
+            ov.set_password('Pass@1234')
+            db.session.add(ov)
+        db.session.commit()
 
     with client.session_transaction() as sess:
         sess['user_id'] = 999
@@ -65,9 +72,10 @@ def test_superadmin_hidden_from_ordinary_admin_list(app, client):
     usernames = [u['username'] for u in users]
     roles = [u['role'] for u in users]
 
-    assert 'test_superadmin_root' not in usernames, "Superadmin was leaked to ordinary admin users!"
+    assert 'explicit_superadmin' not in usernames, "Superadmin was leaked to ordinary admin users!"
     assert 'superadmin' not in roles, "Superadmin role appeared in ordinary admin query!"
     assert 'ordinary_verifier' in usernames
+
 
 
 def test_audit_log_records_actions(app):
