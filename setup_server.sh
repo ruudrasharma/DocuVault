@@ -166,6 +166,68 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$APP_NAME"
 ok "Systemd service created and enabled"
 
+# ── ML Anomaly Retrain timer (weekly) ────────────────────────────────────────
+log "Installing ML anomaly model retrain timer..."
+sudo tee /etc/systemd/system/docuvault-retrain.service > /dev/null << EOF
+[Unit]
+Description=DocuVault — Weekly ML anomaly model retrain
+After=network.target
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+ExecStart=$VENV_DIR/bin/python3 -m app.ml_anomaly --retrain
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=docuvault-retrain
+EOF
+
+sudo tee /etc/systemd/system/docuvault-retrain.timer > /dev/null << EOF
+[Unit]
+Description=DocuVault — Run ML retrain every Sunday at 03:00
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable docuvault-retrain.timer
+sudo systemctl start docuvault-retrain.timer
+ok "ML retrain timer enabled (fires weekly Sun 03:00)"
+
+# ── Federated Learning server ─────────────────────────────────────────────────
+log "Installing Federated Learning server service..."
+sudo tee /etc/systemd/system/docuvault-fl.service > /dev/null << EOF
+[Unit]
+Description=DocuVault — Federated Learning Flower server
+After=network.target
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+ExecStart=$VENV_DIR/bin/python3 -m app.federated_learning --server
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=docuvault-fl
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable docuvault-fl
+ok "Federated Learning server service installed and enabled"
+
 # ── Open firewall port ────────────────────────────────────────────────────────
 log "Opening port $APP_PORT in firewall..."
 if command -v ufw &>/dev/null; then

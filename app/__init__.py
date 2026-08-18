@@ -116,7 +116,7 @@ app.register_blueprint(superadmin_bp)
 
 # ── DB initialisation + column migrations ─────────────────────────────────────
 with app.app_context():
-    from .database import User, PendingAccount, AuditLog
+    from .database import User, PendingAccount, AuditLog, InstitutionSigningKey
     db.create_all()
     try:
         from sqlalchemy import text

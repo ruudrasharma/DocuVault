@@ -18,6 +18,28 @@ from .blockchain import blockchain
 
 logger = logging.getLogger(__name__)
 
+# Rate limiter — wallet key-unwrap endpoints need their own tighter limit
+try:
+    from . import limiter as _limiter
+except ImportError:
+    _limiter = None
+
+def _wallet_limit(f):
+    """
+    Rate-limit for wallet endpoints that decrypt a private key with user password.
+    10 attempts per 15 minutes per IP — legitimate re-use is far below this;
+    brute-force attempts hit it in seconds.
+    Admin/superadmin are exempt (matching the existing auth pattern).
+    """
+    if _limiter:
+        def _wallet_rate():
+            role = session.get('role', '')
+            if role in ('admin', 'superadmin'):
+                return None
+            return '10 per 15 minutes'
+        return _limiter.limit(_wallet_rate)(f)
+    return f
+
 wallet_bp = Blueprint('wallet', __name__)
 
 @wallet_bp.route('/wallet/setup', methods=['POST'])
@@ -120,6 +142,7 @@ def upload_to_wallet():
 @wallet_bp.route('/wallet/share', methods=['POST'])
 @login_required
 @role_required('citizen', 'verifier', 'admin')
+@_wallet_limit
 def share_document():
     """Citizen grants temporary access to a grantee agency/verifier."""
     data = request.get_json(silent=True) or {}
@@ -290,6 +313,7 @@ def received_documents():
 
 @wallet_bp.route('/wallet/fetch/<int:document_id>', methods=['GET', 'POST'])
 @login_required
+@_wallet_limit
 def fetch_document(document_id):
     """
     Fetch and decrypt document binary bytes.
@@ -384,6 +408,7 @@ def audit_trail(document_id):
 @wallet_bp.route('/wallet/prove-claim', methods=['POST'])
 @login_required
 @role_required('citizen', 'verifier', 'admin')
+@_wallet_limit
 def prove_claim():
     """
     Generate a zero-knowledge proof token for a document predicate (e.g. proof of degree ownership).
@@ -494,7 +519,13 @@ def enroll_face():
 
         return jsonify({
             'success': True,
-            'message': 'Face embedding enrolled and securely encrypted. Raw image has been discarded.'
+            'message': 'Face embedding enrolled and securely encrypted. Raw image has been discarded.',
+            'disclaimer': (
+                'This is a photo-similarity check using local embeddings, NOT a certified '
+                'biometric identity system. It provides an additional verification layer '
+                'but is not legally equivalent to government-issued biometric authentication. '
+                'Opt-in only — you can remove your enrollment at any time.'
+            )
         })
     except Exception as e:
         logger.error(f"Face enrollment failed: {e}")
@@ -503,6 +534,7 @@ def enroll_face():
 
 @wallet_bp.route('/wallet/verify_face', methods=['POST'])
 @login_required
+@_wallet_limit
 def verify_face():
     """
     Verifies live photo against a citizen's enrolled encrypted face embedding.
@@ -538,7 +570,12 @@ def verify_face():
             'verified': is_match,
             'similarity_score': score,
             'threshold': 0.72,
-            'citizen': citizen_username
+            'citizen': citizen_username,
+            'disclaimer': (
+                'Result is based on cosine similarity of local face embeddings — '
+                'NOT a certified biometric authentication system. '
+                'This is an advisory check only; do not use as sole identity proof for high-stakes decisions.'
+            )
         })
     except Exception as e:
         logger.error(f"Face verification failed: {e}")

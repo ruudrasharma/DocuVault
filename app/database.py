@@ -123,6 +123,19 @@ class WalletKey(db.Model):
     face_embedding_encrypted = db.Column(db.LargeBinary, nullable=True)
 
 
+class InstitutionSigningKey(db.Model):
+    """
+    Ed25519 signing keypair for institution accounts.
+    Used to sign every document block they issue on the blockchain.
+    Private key is AES-GCM-encrypted with the institution's password via PBKDF2.
+    """
+    __tablename__ = 'institution_signing_key'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    public_key_hex = db.Column(db.String(128), nullable=False)    # Ed25519 public key, hex
+    encrypted_private_key = db.Column(db.Text, nullable=False)    # AES-GCM encrypted private key, b64
+    kdf_salt = db.Column(db.String(64), nullable=False)           # PBKDF2 salt, hex
+
 
 class VerifiableCredential(db.Model):
     __tablename__ = 'verifiable_credential'

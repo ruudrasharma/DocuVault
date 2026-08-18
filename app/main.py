@@ -127,8 +127,27 @@ def upload_doc():
             os.unlink(file_path)
             return jsonify({'error': dim_err}), 413
 
-        # ── Step 1-4: OCR → hash → ZKP ──────────────────────
-        cert_hash, norm_fields, raw_fields, block_index = process_upload(file_path, issuer)
+        # ── Step 1-4: OCR → hash → ZKP → Blockchain (signed) ──────
+        # Phase 4: Obtain institution Ed25519 signing key for block authentication
+        signer_privkey = None
+        inst_password = request.form.get('password')
+        try:
+            from .signing import ensure_signing_key, get_signing_privkey
+            from .database import User as _User
+            issuer_user = _User.query.filter_by(username=issuer).first()
+            if issuer_user and inst_password:
+                # Provision keypair if first upload, then decrypt for this signing operation
+                ensure_signing_key(issuer_user, inst_password)
+                signer_privkey = get_signing_privkey(issuer_user, inst_password)
+            else:
+                logger.warning(
+                    "Upload by '%s' without password field — block will be UNSIGNED. "
+                    "Include 'password' in the upload form to enable Ed25519 block signing.", issuer
+                )
+        except Exception as sign_err:
+            logger.warning("Signing key unavailable (%s) — block will be unsigned.", sign_err)
+
+        cert_hash, norm_fields, raw_fields, block_index = process_upload(file_path, issuer, signer_privkey)
         logger.info("Upload: hash=%s block=%d issuer=%s", cert_hash[:12], block_index, issuer)
 
         # ── Step 4.5: Run AI Anomaly Detection ──────────────

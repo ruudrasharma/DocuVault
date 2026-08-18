@@ -121,3 +121,75 @@ def unwrap_dek(wrapped_b64: str, private_pem: str) -> bytes:
     )
     return dek
 
+
+# ── Phase 5: Hybrid PQC + RSA DEK wrapping ────────────────────────────────────
+# Format: 'v2:<pqc_ct_b64>:<nonce_b64>:<pqc_wrapped_rsa_ct_b64>'
+# Security: both PQC (ML-KEM-768 or X25519) AND RSA must be broken to recover the DEK.
+
+_V2_PREFIX = 'v2:'
+
+def hybrid_wrap_dek(dek: bytes, rsa_public_pem: str, pqc_public_key_bytes: bytes) -> str:
+    """
+    Hybrid-wrap a DEK with RSA-OAEP + PQC (ML-KEM-768 / X25519 fallback).
+    Returns a versioned 'v2:...' string.
+
+    Layer 1 (RSA-OAEP): wraps the DEK — classical protection.
+    Layer 2 (PQC AES-GCM): additionally encrypts the RSA-wrapped blob using
+    the PQC shared secret, so an attacker must break BOTH to recover the DEK.
+    """
+    from .pqc import pqc_encapsulate
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    # Layer 1: RSA-OAEP wrap the DEK
+    rsa_wrapped_b64 = wrap_dek(dek, rsa_public_pem)
+    rsa_wrapped_bytes = base64.b64decode(rsa_wrapped_b64)
+
+    # Layer 2: PQC encapsulate to get a shared secret, then AES-GCM encrypt the RSA-wrapped blob
+    pqc_ciphertext, pqc_shared_secret = pqc_encapsulate(pqc_public_key_bytes)
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(pqc_shared_secret[:32])
+    pqc_encrypted_rsa_wrapped = aesgcm.encrypt(nonce, rsa_wrapped_bytes, None)
+
+    # Serialise: v2:<pqc_ct>:<nonce>:<pqc_encrypted_rsa_wrapped>
+    return (
+        _V2_PREFIX
+        + base64.b64encode(pqc_ciphertext).decode()
+        + ':'
+        + base64.b64encode(nonce).decode()
+        + ':'
+        + base64.b64encode(pqc_encrypted_rsa_wrapped).decode()
+    )
+
+
+def hybrid_unwrap_dek(wrapped_str: str, rsa_private_pem: str, pqc_private_key_bytes: bytes) -> bytes:
+    """
+    Unwrap a hybrid-wrapped DEK. Handles both v2: (hybrid) and legacy RSA-only formats.
+
+    v2 format: peel PQC AES-GCM layer first, then RSA-OAEP layer.
+    Legacy (no v2: prefix): fall back to plain unwrap_dek() for backwards compat.
+    """
+    from .pqc import pqc_decapsulate
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    if not wrapped_str.startswith(_V2_PREFIX):
+        # Legacy RSA-only wrapped DEK — backwards compatible
+        return unwrap_dek(wrapped_str, rsa_private_pem)
+
+    parts = wrapped_str[len(_V2_PREFIX):].split(':')
+    if len(parts) != 3:
+        raise ValueError("Malformed v2 hybrid-wrapped DEK.")
+
+    pqc_ciphertext = base64.b64decode(parts[0])
+    nonce = base64.b64decode(parts[1])
+    pqc_encrypted_rsa_wrapped = base64.b64decode(parts[2])
+
+    # Recover PQC shared secret
+    pqc_shared_secret = pqc_decapsulate(pqc_private_key_bytes, pqc_ciphertext)
+
+    # Decrypt the RSA-wrapped blob
+    aesgcm = AESGCM(pqc_shared_secret[:32])
+    rsa_wrapped_bytes = aesgcm.decrypt(nonce, pqc_encrypted_rsa_wrapped, None)
+    rsa_wrapped_b64 = base64.b64encode(rsa_wrapped_bytes).decode()
+
+    # Unwrap RSA layer to recover DEK
+    return unwrap_dek(rsa_wrapped_b64, rsa_private_pem)

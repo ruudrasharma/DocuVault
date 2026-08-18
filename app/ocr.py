@@ -114,15 +114,16 @@ def extract_fields(file_path: str) -> dict:
 
 # ── Upload pipeline ────────────────────────────────────────────────────────────
 
-def process_upload(file_path: str, issuer: str) -> tuple:
+def process_upload(file_path: str, issuer: str, signer_privkey: bytes = None) -> tuple:
     """
     Full upload pipeline:
       1. OCR → field dict
       2. Normalize + hash → cert_hash
-      3. Write block to blockchain (hash + ZKP)
-      4. Return (cert_hash, normalized_fields, raw_fields)
+      3. Write block to blockchain (hash + ZKP + Ed25519 signature if key supplied)
+      4. Return (cert_hash, normalized_fields, raw_fields, block_index)
 
     Raises on OCR failure, PermissionError if role wrong, etc.
+    signer_privkey: raw Ed25519 private key bytes (32 bytes) for block signing.
     """
     raw_fields = extract_fields(file_path)
     norm_fields = normalize_fields(raw_fields)
@@ -141,6 +142,7 @@ def process_upload(file_path: str, issuer: str) -> tuple:
         zkp_blinding=str(blinding_factor),   # persisted for Phase 6 real ZKP verify
         issuer=issuer,
         fields_summary={k: v for k, v in norm_fields.items() if v},  # non-empty only
+        signer_privkey=signer_privkey,        # Phase 4: Ed25519 signing
     )
 
     return cert_hash, norm_fields, raw_fields, block_index
