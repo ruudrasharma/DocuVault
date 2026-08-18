@@ -126,6 +126,9 @@ def share_document():
     doc_id = data.get('document_id')
     grantee_username = data.get('grantee_username', '').strip()
     expires_at_str = data.get('expires_at')
+    password = data.get('password')
+    if not password:
+        return jsonify({'error': 'Wallet password is required to authorize sharing.'}), 400
     if not doc_id or not grantee_username or not expires_at_str:
         return jsonify({'error': 'document_id, grantee_username, and expires_at are required.'}), 400
         
@@ -304,7 +307,8 @@ def fetch_document(document_id):
         return jsonify({'error': 'Access denied or consent grant expired/revoked.'}), 403
         
     json_data = request.get_json(silent=True) or {}
-    password = request.args.get('password') or json_data.get('password') or request.form.get('password')
+    # Phase 3: Never accept password from URL query params (logs/history exposure)
+    password = json_data.get('password') or request.form.get('password')
     
     try:
         if current_user.id == doc.owner_id:

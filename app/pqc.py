@@ -15,7 +15,7 @@ Provides:
 import os
 import logging
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 logger = logging.getLogger(__name__)
@@ -28,18 +28,12 @@ try:
     _oqs_available = True
     logger.info(f"liboqs-python loaded successfully. PQC active: {PQC_ALGORITHM}")
 except ImportError:
-    try:
-        # Fallback to Kyber768 alias in older liboqs versions
-        import oqs
-        PQC_ALGORITHM = "Kyber768"
-        _oqs_available = True
-        logger.info(f"liboqs-python loaded with legacy name: {PQC_ALGORITHM}")
-    except Exception:
-        _oqs_available = False
-        logger.warning(
-            "liboqs / liboqs-python not found in Python path. "
-            "PQC operating in software emulation / fallback mode."
-        )
+    _oqs_available = False
+    logger.warning(
+        "liboqs / liboqs-python not found in Python path. "
+        "PQC operating in classical X25519 fallback mode — NOT post-quantum safe. "
+        "Run setup_server.sh to build liboqs for full ML-KEM-768 protection."
+    )
 
 
 def is_pqc_available() -> bool:
@@ -67,13 +61,13 @@ def pqc_generate_keypair() -> tuple[bytes, bytes]:
     pub = priv.public_key()
     return (
         pub.public_bytes(
-            encoding=hashes.serialization.Encoding.Raw,
-            format=hashes.serialization.PublicFormat.Raw
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw
         ),
         priv.private_bytes(
-            encoding=hashes.serialization.Encoding.Raw,
-            format=hashes.serialization.PrivateFormat.Raw,
-            encryption_algorithm=hashes.serialization.NoEncryption()
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption()
         )
     )
 
@@ -95,8 +89,8 @@ def pqc_encapsulate(public_key_bytes: bytes) -> tuple[bytes, bytes]:
     from cryptography.hazmat.primitives.asymmetric import x25519
     ephemeral_priv = x25519.X25519PrivateKey.generate()
     ephemeral_pub = ephemeral_priv.public_key().public_bytes(
-        encoding=hashes.serialization.Encoding.Raw,
-        format=hashes.serialization.PublicFormat.Raw
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw
     )
     peer_pub = x25519.X25519PublicKey.from_public_bytes(public_key_bytes[:32])
     raw_secret = ephemeral_priv.exchange(peer_pub)

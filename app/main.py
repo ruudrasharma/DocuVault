@@ -5,10 +5,10 @@ from .ocr import process_upload, verify_upload, normalize_and_hash, extract_fiel
 from .blockchain import blockchain
 from .zkp import generate_zkp_proof, verify_zkp_hex, proof_to_hex
 from .pqc import pqc_encrypt
-from .database_models import User
+from .database import User, VerifiableCredential, AnalyticsLog
 from . import db
 from werkzeug.utils import secure_filename
-from .database_models import CertificateRecord as CertRecord
+from .database_models import CertificateRecord as CertRecord  # lightweight blockchain-index model
 import os
 import json as _json
 import logging
@@ -490,7 +490,7 @@ def chain_stats():
 def vc_issue():
     """Issues a portable W3C Verifiable Credential signed with Ed25519."""
     from .verifiable_credentials import issue_vc
-    from .database import VerifiableCredential as VCModel
+    VCModel = VerifiableCredential  # already imported at top of file
     data = request.get_json(silent=True) or {}
     cert_hash = data.get('cert_hash')
     holder_username = data.get('holder_username', 'citizen')
@@ -621,7 +621,8 @@ def verify_by_qr_image():
 @role_required('admin')
 def admin_analytics():
     """Returns analytics aggregate statistics."""
-    from .database import AnalyticsLog as ALog, Document as DocModel
+    from .database import Document as DocModel
+    ALog = AnalyticsLog  # already imported at top of file
     total_docs = DocModel.query.count()
     total_logs = ALog.query.count()
     anomaly_count = ALog.query.filter(ALog.status == 'anomaly_detected').count()
