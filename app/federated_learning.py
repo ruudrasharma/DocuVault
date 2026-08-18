@@ -228,3 +228,55 @@ def export_global_model_to_anomaly_format(global_model: DocumentAutoencoder, out
         if os.path.exists(temp_file):
             os.remove(temp_file)
         return False
+
+
+# ── CLI entry point ────────────────────────────────────────────────────────────
+if __name__ == '__main__':
+    import argparse
+    import signal
+    import time as _time
+
+    parser = argparse.ArgumentParser(description='DocuVault Federated Learning')
+    parser.add_argument('--server', action='store_true',
+                        help='Start a persistent Flower FL aggregation server (listens for institution clients)')
+    parser.add_argument('--simulate', action='store_true',
+                        help='Run a local FedAvg simulation across synthetic institution shards')
+    parser.add_argument('--port', type=int, default=8080,
+                        help='Port for the FL server (default: 8080)')
+    parser.add_argument('--rounds', type=int, default=3,
+                        help='Number of FL rounds (default: 3)')
+    parser.add_argument('--min-clients', type=int, default=1,
+                        help='Minimum FL clients required per round (default: 1)')
+    args = parser.parse_args()
+
+    if args.server:
+        logger.info(f"Starting DocuVault Federated Learning server on 0.0.0.0:{args.port} ...")
+        strategy = fl.server.strategy.FedAvg(
+            fraction_fit=1.0,
+            fraction_evaluate=1.0,
+            min_fit_clients=args.min_clients,
+            min_evaluate_clients=args.min_clients,
+            min_available_clients=args.min_clients,
+        )
+
+        def _on_shutdown(sig, frame):
+            logger.info("FL server shutting down gracefully.")
+            raise SystemExit(0)
+
+        signal.signal(signal.SIGTERM, _on_shutdown)
+        signal.signal(signal.SIGINT, _on_shutdown)
+
+        fl.server.start_server(
+            server_address=f"0.0.0.0:{args.port}",
+            config=fl.server.ServerConfig(num_rounds=args.rounds),
+            strategy=strategy,
+        )
+
+    elif args.simulate:
+        logger.info("Running local FL simulation...")
+        global_model = simulate_federated_learning()
+        success = export_global_model_to_anomaly_format(global_model)
+        logger.info(f"Simulation complete. Model exported: {success}")
+
+    else:
+        parser.print_help()
