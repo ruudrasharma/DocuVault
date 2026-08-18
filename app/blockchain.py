@@ -176,10 +176,15 @@ class Blockchain:
         issuer: str,
         fields_summary: dict | None = None,
         signer_privkey: bytes | None = None,
+        zkp_blinding: str | None = None,
     ) -> int:
         """
         Add a document record block, cryptographically signed with institution key.
         Returns the new block index.
+        zkp_blinding: the Pedersen blinding factor (as string int) stored alongside
+        the commitment so verify_zkp_hex can do a real cryptographic check later.
+        This is intentionally public for institution-issued documents — the hash
+        is already public at this layer, so opening the commitment reveals nothing extra.
         """
         payload = {
             "cert_hash":      cert_hash,
@@ -188,6 +193,8 @@ class Blockchain:
             "issued_at":      time(),
             "fields_summary": fields_summary or {},
         }
+        if zkp_blinding is not None:
+            payload["zkp_blinding"] = zkp_blinding
         return self._add_raw(json.dumps(payload, sort_keys=True), signer_privkey_bytes=signer_privkey)
 
     def add_wallet_issue_block(self, cert_hash: str, owner_username: str, issuer_username: str, signer_privkey: bytes | None = None) -> int:

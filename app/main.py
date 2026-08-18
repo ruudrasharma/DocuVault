@@ -369,12 +369,14 @@ def check_certificate():
     if not block_data:
         return jsonify({'verified': False, 'message': 'Not found on blockchain'})
 
-    # 2. ZKP re-verification
+    # 2. ZKP re-verification — Phase 6: real Pedersen commitment check
     zkp_valid = False
     try:
         stored_proof = block_data.get('zkp_proof', '')
         if stored_proof:
-            zkp_valid = verify_zkp_hex(stored_proof, cert_id)
+            stored_blinding_str = block_data.get('zkp_blinding')
+            stored_blinding = int(stored_blinding_str) if stored_blinding_str else None
+            zkp_valid = verify_zkp_hex(stored_proof, cert_id, stored_blinding)
     except Exception:
         pass
 

@@ -51,9 +51,15 @@ def detect_and_embed(image_input) -> np.ndarray | None:
 
     # Use OpenCV Haar Cascade for face detection region
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-    cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-    face_cascade = cv2.CascadeClassifier(cascade_path)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+    try:
+        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+    except AttributeError:
+        # opencv-python-headless or incompatible build — Haar cascade unavailable
+        # Fall back to centre-crop heuristic
+        logger.warning("cv2.CascadeClassifier unavailable — using centre-crop fallback for face detection")
+        faces = []
 
     if len(faces) == 0:
         # If frontal cascade fails, try profile or center crop fallback

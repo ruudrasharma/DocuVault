@@ -128,16 +128,17 @@ def process_upload(file_path: str, issuer: str) -> tuple:
     norm_fields = normalize_fields(raw_fields)
     cert_hash = normalize_and_hash(raw_fields)
 
-    # ZKP commitment
+    # ZKP commitment — generate_zkp_proof returns (commitment_point, blinding_factor)
     from .zkp import generate_zkp_proof, proof_to_hex
-    proof = generate_zkp_proof(cert_hash)
+    proof, blinding_factor = generate_zkp_proof(cert_hash)
     proof_hex = proof_to_hex(proof)
 
-    # Write to blockchain
+    # Write to blockchain (includes blinding factor so verify can do a real check)
     from .blockchain import blockchain
     block_index = blockchain.add_document_block(
         cert_hash=cert_hash,
         zkp_proof=proof_hex,
+        zkp_blinding=str(blinding_factor),   # persisted for Phase 6 real ZKP verify
         issuer=issuer,
         fields_summary={k: v for k, v in norm_fields.items() if v},  # non-empty only
     )
@@ -164,11 +165,13 @@ def verify_upload(file_path: str) -> tuple:
     if not block_data:
         return False, cert_hash, None, norm_fields
 
-    # Re-verify ZKP (stored commitment point validation)
+    # Re-verify ZKP — Phase 6: real Pedersen commitment check if blinding stored
     from .zkp import verify_zkp_hex
     try:
         stored_proof = block_data.get("zkp_proof", "")
-        zkp_valid = verify_zkp_hex(stored_proof, cert_hash) if stored_proof else True
+        stored_blinding_str = block_data.get("zkp_blinding")
+        stored_blinding = int(stored_blinding_str) if stored_blinding_str else None
+        zkp_valid = verify_zkp_hex(stored_proof, cert_hash, stored_blinding) if stored_proof else True
     except Exception as e:
         logger.warning("ZKP re-verification error: %s", e)
         zkp_valid = False

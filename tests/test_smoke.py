@@ -57,8 +57,8 @@ def test_upload_endpoint_accepts_file(auth_client, sample_jpg):
         r = auth_client.post('/upload', data=data,
                               content_type='multipart/form-data',
                               follow_redirects=True)
-        # Accept successful JSON response, redirect, client error, or offline OCR microservice 500
-        assert r.status_code in (200, 302, 400, 422, 500), \
+        # Accept successful JSON response, redirect, client error, or offline OCR microservice 503/500
+        assert r.status_code in (200, 302, 400, 422, 500, 503), \
             f"Upload returned unexpected status {r.status_code}"
 
 

@@ -206,11 +206,15 @@ def schnorr_verify(proof: dict) -> bool:
 def generate_zkp_proof(cert_hash: str, blinding_factor: int = None):
     """
     Generates a Pedersen Commitment on BN128 for cert_hash.
+    Returns the proof dict AND the blinding factor used, so callers can
+    persist the blinding factor alongside the commitment for later verification.
+    Returns: (proof_dict, blinding_factor_int)
     """
     if blinding_factor is None:
         blinding_factor = secrets.randbelow(CURVE_ORDER - 1) + 1
     val_int = int(cert_hash, 16) if isinstance(cert_hash, str) and not cert_hash.isdigit() else int(cert_hash)
-    return pedersen_commit(val_int, blinding_factor)
+    proof = pedersen_commit(val_int, blinding_factor)
+    return proof, blinding_factor
 
 
 def proof_to_hex(proof) -> str:
@@ -220,8 +224,43 @@ def proof_to_hex(proof) -> str:
     return point_to_str(proof)
 
 
-def verify_zkp_hex(stored_commitment: str, cert_hash: str) -> bool:
-    """Verifies that stored commitment represents a valid cryptographic point."""
-    if not stored_commitment:
+def verify_zkp_hex(stored_commitment: str, cert_hash: str, stored_blinding: int = None) -> bool:
+    """
+    Verifies that stored_commitment is a valid Pedersen commitment for cert_hash.
+
+    If stored_blinding is provided (institution-issued documents — blinding is
+    intentionally public here since the hash itself is already public at this layer),
+    this performs a real cryptographic recompute-and-compare check.
+
+    If stored_blinding is absent (legacy blocks issued before Phase 6), falls back
+    to a structural validity check (commitment string is a valid curve-point serialization).
+    This is honest about what it checks — it is NOT a full ZKP, just format validation.
+    """
+    if not stored_commitment or len(stored_commitment) <= 10:
         return False
-    return len(stored_commitment) > 10
+
+    if stored_blinding is not None:
+        # Real cryptographic check: recompute C = v*G + r*H and compare
+        try:
+            val_int = int(cert_hash, 16) if isinstance(cert_hash, str) and not cert_hash.isdigit() else int(cert_hash)
+            recomputed = pedersen_commit(val_int, stored_blinding)
+            recomputed_str = point_to_str(recomputed)
+            return recomputed_str == stored_commitment
+        except Exception as exc:
+            logger.error("ZKP recompute verification failed: %s", exc)
+            return False
+
+    # Legacy fallback: structural check only (no blinding factor stored)
+    # Honest description: confirms the string looks like a valid curve point,
+    # NOT a full commitment binding check.
+    if ':' in stored_commitment:
+        parts = stored_commitment.split(':')
+        if len(parts) == 2:
+            try:
+                int(parts[0])
+                int(parts[1])
+                return True  # Looks like a valid x:y curve point
+            except ValueError:
+                return False
+    # Fallback hash-mode (software simulation without py_ecc)
+    return len(stored_commitment) == 64  # sha256 hex digest length
