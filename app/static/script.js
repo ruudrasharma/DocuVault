@@ -695,7 +695,7 @@ async function initializeDashboard() {
 
     const roleEl = document.getElementById('user-role-display');
     if (roleEl) {
-      const roleLabels = { admin: 'Administrator', institution: 'Institution', verifier: 'Verifier' };
+      const roleLabels = { admin: 'Administrator', institution: 'Institution', verifier: 'Verifier', citizen: 'Citizen', superadmin: 'Super Admin' };
       roleEl.textContent = roleLabels[state.currentRole] || state.currentRole;
     }
 
@@ -710,9 +710,11 @@ async function initializeDashboard() {
 
     // Set default panel
     const defaultPanel = state.currentRole === 'institution' ? 'upload'
-                       : state.currentRole === 'admin'       ? 'verify'
+                       : state.currentRole === 'admin'       ? 'overview'
+                       : state.currentRole === 'superadmin'  ? 'overview'
                        : 'verify';
     switchPanel(defaultPanel);
+
 
   } catch (err) {
     console.error('Failed to get role:', err);
@@ -1065,18 +1067,19 @@ function showSectionsForRole(role) {
   const adminPanel  = document.getElementById('panel-admin');
 
   // Hide (never remove) so panels can be shown again if role changes
-  if (role !== 'institution' && role !== 'admin') {
+  if (role !== 'institution' && role !== 'admin' && role !== 'superadmin') {
     if (uploadTab)   uploadTab.style.display   = 'none';
     if (uploadNav)   uploadNav.style.display   = 'none';
     if (uploadPanel) uploadPanel.style.display = 'none';
   }
 
-  if (role !== 'admin') {
+  if (role !== 'admin' && role !== 'superadmin') {
     if (adminTab)   adminTab.style.display   = 'none';
     if (adminNav)   adminNav.style.display   = 'none';
     if (adminPanel) adminPanel.style.display = 'none';
   }
 }
+
 
 window.addEventListener('DOMContentLoaded', initializeDashboard);
 

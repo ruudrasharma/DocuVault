@@ -35,9 +35,10 @@ def index():
 @login_required
 @role_required('admin', 'institution', 'verifier', 'citizen', 'superadmin')
 def dashboard(role):
-    if role == 'superadmin' or session.get('role') == 'superadmin':
+    if role == 'superadmin' and request.args.get('view') == 'matrix':
         return render_template('superadmin.html')
     return render_template('index.html')
+
 
 
 import uuid
