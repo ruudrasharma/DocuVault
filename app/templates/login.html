@@ -17,9 +17,9 @@
       animation: cardShake 0.45s ease-in-out both;
     }
     .flash-msg-ajax {
-      background: rgba(239, 68, 68, 0.12);
-      border: 1px solid rgba(239, 68, 68, 0.35);
-      color: #F87171;
+      background: rgba(220, 38, 38, 0.1);
+      border: 1px solid rgba(220, 38, 38, 0.3);
+      color: var(--danger);
       padding: 10px 14px;
       border-radius: 8px;
       font-size: 13px;
@@ -43,7 +43,6 @@
 <div class="orb orb-1"></div>
 <div class="orb orb-2"></div>
 <div class="orb orb-3"></div>
-<div class="scanlines"></div>
 <canvas class="particles-canvas" id="particles"></canvas>
 
 {% if show_splash %}
@@ -98,10 +97,10 @@
     <div class="login-header">
       <div class="login-logo-icon">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#00D4FF" stroke-width="1.5" stroke-linejoin="round"/>
-          <polyline points="14 2 14 8 20 8" stroke="#00D4FF" stroke-width="1.5" stroke-linejoin="round"/>
-          <circle cx="16" cy="17" r="3" stroke="#00FF88" stroke-width="1.5"/>
-          <path d="M14 17l1 1 2.5-2.5" stroke="#00FF88" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="var(--cyan)" stroke-width="1.5" stroke-linejoin="round"/>
+          <polyline points="14 2 14 8 20 8" stroke="var(--cyan)" stroke-width="1.5" stroke-linejoin="round"/>
+          <circle cx="16" cy="17" r="3" stroke="var(--green)" stroke-width="1.5"/>
+          <path d="M14 17l1 1 2.5-2.5" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
       <h1 class="login-title">DOCUVAULT</h1>
@@ -217,13 +216,13 @@
       if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
       if(p.a<0.1||p.a>0.9) p.da*=-1;
       ctx.beginPath(); ctx.arc(p.x%W, p.y%H, p.r, 0, Math.PI*2);
-      ctx.fillStyle = `rgba(0,212,255,${Math.max(0.05,Math.min(0.6,p.a))})`;
+      ctx.fillStyle = `rgba(37,99,235,${Math.max(0.05,Math.min(0.4,p.a))})`;
       ctx.fill();
     });
     for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++) {
       const dx=pts[i].x-pts[j].x, dy=pts[i].y-pts[j].y, d=Math.sqrt(dx*dx+dy*dy);
       if(d<120) { ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y);
-        ctx.strokeStyle=`rgba(0,212,255,${0.12*(1-d/120)})`; ctx.lineWidth=0.5; ctx.stroke(); }
+        ctx.strokeStyle=`rgba(37,99,235,${0.08*(1-d/120)})`; ctx.lineWidth=0.5; ctx.stroke(); }
     }
     requestAnimationFrame(draw);
   }

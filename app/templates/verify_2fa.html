@@ -12,8 +12,8 @@
 <div class="grid-bg"></div>
 <div class="orb orb-1"></div>
 <div class="orb orb-2"></div>
-<div class="scanlines"></div>
 <canvas class="particles-canvas" id="particles"></canvas>
+
 
 <div class="login-wrap" style="z-index:10">
   <div class="verify-card">
@@ -22,14 +22,14 @@
     <div class="login-header" style="text-align:center;padding:36px 40px 24px">
       <!-- Animated shield icon -->
       <div style="width:72px;height:72px;margin:0 auto 20px;position:relative">
-        <div style="width:72px;height:72px;border-radius:50%;background:rgba(0,212,255,0.08);border:1.5px solid rgba(0,212,255,0.3);display:flex;align-items:center;justify-content:center;animation:iconPulse 2s ease-in-out infinite">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="1.5">
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--cyan-dim);border:1.5px solid var(--border-glow);display:flex;align-items:center;justify-content:center;animation:iconPulse 2s ease-in-out infinite">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <path d="M9 12l2 2 4-4" stroke="#00FF88" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 12l2 2 4-4" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
         <!-- Rotating ring -->
-        <div style="position:absolute;inset:-8px;border-radius:50%;border:1px dashed rgba(0,212,255,0.3);animation:ringRotate 6s linear infinite"></div>
+        <div style="position:absolute;inset:-8px;border-radius:50%;border:1px dashed rgba(37,99,235,0.25);animation:ringRotate 6s linear infinite"></div>
       </div>
 
       <h1 class="login-title" style="font-size:18px">TWO-FACTOR AUTH</h1>
@@ -130,7 +130,7 @@
       p.x+=p.vx; p.y+=p.vy;
       if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
       ctx.beginPath(); ctx.arc(p.x%W,p.y%H,p.r,0,Math.PI*2);
-      ctx.fillStyle=`rgba(0,212,255,${p.a*.5})`; ctx.fill();
+      ctx.fillStyle=`rgba(37,99,235,${p.a*.3})`; ctx.fill();
     });
     requestAnimationFrame(draw);
   }

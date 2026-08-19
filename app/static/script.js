@@ -442,32 +442,32 @@ function renderResults(results, context = 'verify') {
     const aeLoss = r.anomaly_analysis?.autoencoder_loss || 0.0;
 
     const aiAnomalySection = `
-      <div style="margin-top:12px;padding:12px;border-radius:8px;background:${isAnomaly ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.10)'};border:1px solid ${isAnomaly ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.30)'}">
+      <div style="margin-top:12px;padding:12px;border-radius:8px;background:${isAnomaly ? 'rgba(220,38,38,0.1)' : 'rgba(5,150,105,0.08)'};border:1px solid ${isAnomaly ? 'rgba(220,38,38,0.3)' : 'rgba(5,150,105,0.25)'}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:${isAnomaly ? '#F87171' : 'var(--green)'};display:flex;align-items:center;gap:6px">
-            <span style="font-size:14px">🤖</span> AI ANOMALY & ELA TAMPER ANALYSIS
+          <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:${isAnomaly ? 'var(--danger)' : 'var(--green)'};display:flex;align-items:center;gap:6px">
+            <span style="font-size:14px">🤖</span> AI ANOMALY &amp; ELA TAMPER ANALYSIS
           </div>
-          <span style="font-size:10px;padding:3px 8px;border-radius:12px;background:${isAnomaly ? '#EF4444' : '#10B981'};color:#fff;font-weight:700;font-family:var(--font-mono)">
+          <span style="font-size:10px;padding:3px 8px;border-radius:12px;background:${isAnomaly ? 'var(--danger)' : 'var(--green)'};color:#fff;font-weight:700;font-family:var(--font-mono)">
             ${isAnomaly ? '⚠️ TAMPER RISK DETECTED' : '✓ AI VERIFIED CLEAN'}
           </span>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:10px;font-family:var(--font-mono)">
-          <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+          <div style="background:var(--bg-elevated);padding:6px 8px;border-radius:6px;border:1px solid var(--border)">
             <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">ELA PIXEL TAMPER</div>
-            <div style="color:${elaTampered ? '#F87171' : 'var(--green)'};font-weight:700">
+            <div style="color:${elaTampered ? 'var(--danger)' : 'var(--green)'};font-weight:700">
               ${elaTampered ? '⚠️ Spliced/Edited' : '✓ Untampered'} (${(elaRatio * 100).toFixed(1)}%)
             </div>
           </div>
-          <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+          <div style="background:var(--bg-elevated);padding:6px 8px;border-radius:6px;border:1px solid var(--border)">
             <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">ISOLATION FOREST</div>
-            <div style="color:${textAnomaly || imageAnomaly ? '#F87171' : 'var(--green)'};font-weight:700">
+            <div style="color:${textAnomaly || imageAnomaly ? 'var(--danger)' : 'var(--green)'};font-weight:700">
               ${textAnomaly || imageAnomaly ? '⚠️ Outlier' : '✓ Inlier'} (${score.toFixed(2)})
             </div>
           </div>
-          <div style="background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px">
+          <div style="background:var(--bg-elevated);padding:6px 8px;border-radius:6px;border:1px solid var(--border)">
             <div style="color:var(--text-muted);font-size:9px;margin-bottom:2px">AUTOENCODER FL</div>
-            <div style="color:${aeAnomaly ? '#F87171' : 'var(--green)'};font-weight:700">
+            <div style="color:${aeAnomaly ? 'var(--danger)' : 'var(--green)'};font-weight:700">
               ${aeAnomaly ? '⚠️ Structural Error' : '✓ Normal'} (${aeLoss.toFixed(2)})
             </div>
           </div>
@@ -810,7 +810,7 @@ async function loadMyDocuments() {
     }
 
     el.innerHTML = docs.map(d => `
-      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:var(--r-md);padding:18px;display:flex;flex-direction:column;gap:12px">
+      <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-md);padding:18px;display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between">
           <div>
             <div style="font-size:14px;font-weight:700;color:var(--text-primary)">${d.original_filename}</div>
@@ -819,15 +819,15 @@ async function loadMyDocuments() {
           <span class="badge badge-verified" style="font-size:10px">AES-256-GCM</span>
         </div>
 
-        <div style="background:rgba(0,0,0,0.2);border-radius:var(--r-sm);padding:8px 12px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">
+        <div style="background:var(--bg-deep);border-radius:var(--r-sm);padding:8px 12px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted);border:1px solid var(--border)">
           <div>HASH: ${(d.cert_hash || '').substring(0, 24)}…</div>
           <div style="margin-top:2px">BLOCK #${d.block_index} · ${d.created_at}</div>
         </div>
 
         <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
           <button onclick="openShareModal(${d.id})" class="btn-action btn-cyan" style="font-size:11px;padding:6px 12px">⟶ Share</button>
-          <button onclick="downloadWalletDoc(${d.id})" class="btn-action" style="font-size:11px;padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border)">⬇ Download</button>
-          <button onclick="loadAuditTrail(${d.id})" class="btn-action" style="font-size:11px;padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border)">📜 Audit Trail</button>
+          <button onclick="downloadWalletDoc(${d.id})" class="btn-action" style="font-size:11px;padding:6px 12px;background:var(--bg-elevated);border:1px solid var(--border)">⬇ Download</button>
+          <button onclick="loadAuditTrail(${d.id})" class="btn-action" style="font-size:11px;padding:6px 12px;background:var(--bg-elevated);border:1px solid var(--border)">📜 Audit Trail</button>
         </div>
       </div>
     `).join('');
@@ -924,7 +924,7 @@ async function loadMyGrants() {
     el.innerHTML = `<table style="width:100%;border-collapse:collapse">
       <thead><tr>${['Grant ID', 'Document', 'Grantee', 'Expires', 'Status', 'Action'].map(h => `<th style="padding:12px 16px;text-align:left;font-size:10px;font-family:var(--font-mono);color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
       <tbody>${grants.map(g => `
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <tr style="border-bottom:1px solid var(--border)">
           <td style="padding:12px 16px;font-size:11px;font-family:var(--font-mono);color:var(--cyan)">#${g.grant_id}</td>
           <td style="padding:12px 16px;font-size:12px;color:var(--text-primary)">${g.original_filename}</td>
           <td style="padding:12px 16px;font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">${g.grantee_username}</td>
@@ -933,7 +933,7 @@ async function loadMyGrants() {
             <span class="badge ${g.status === 'active' ? 'badge-verified' : 'badge-rejected'}" style="font-size:10px;text-transform:uppercase">${g.status}</span>
           </td>
           <td style="padding:12px 16px">
-            ${g.status === 'active' ? `<button onclick="revokeGrant(${g.grant_id})" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#F87171;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;font-family:var(--font-mono)">REVOKE</button>` : '<span style="font-size:11px;color:var(--text-muted)">—</span>'}
+            ${g.status === 'active' ? `<button onclick="revokeGrant(${g.grant_id})" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:var(--danger);padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;font-family:var(--font-mono)">REVOKE</button>` : '<span style="font-size:11px;color:var(--text-muted)">—</span>'}
           </td>
         </tr>
       `).join('')}</tbody></table>`;
@@ -983,7 +983,7 @@ async function loadReceivedDocuments() {
     }
 
     el.innerHTML = docs.map(d => `
-      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:var(--r-md);padding:18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-md);padding:18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
         <div>
           <div style="font-size:14px;font-weight:700;color:var(--text-primary)">${d.original_filename}</div>
           <div style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);margin-top:2px">Owner: ${d.owner_username} · Issued by ${d.issuer_username}</div>
@@ -1021,17 +1021,17 @@ async function loadAuditTrail(docId) {
       return;
     }
 
-    const typeColors = { wallet_issue: 'var(--cyan)', grant: 'var(--green)', revoke: '#F87171' };
+    const typeColors = { wallet_issue: 'var(--cyan)', grant: 'var(--green)', revoke: 'var(--danger)' };
 
     content.innerHTML = `
-      <div style="margin-bottom:16px;background:rgba(0,0,0,0.2);padding:12px;border-radius:6px;font-family:var(--font-mono);font-size:11px">
+      <div style="margin-bottom:16px;background:var(--bg-elevated);padding:12px;border-radius:6px;font-family:var(--font-mono);font-size:11px;border:1px solid var(--border)">
         <div><strong>FILE:</strong> ${data.original_filename}</div>
         <div style="margin-top:4px;word-break:break-all;color:var(--text-muted)"><strong>HASH:</strong> ${data.cert_hash}</div>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:12px">
         ${data.events.map(e => `
-          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:3px solid ${typeColors[e.type] || 'var(--border)'}">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:6px;border-left:3px solid ${typeColors[e.type] || 'var(--border)'}">
             <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:${typeColors[e.type] || 'var(--text-primary)'};text-transform:uppercase;min-width:90px">
               ${e.type}
             </div>
