@@ -34,7 +34,10 @@ def role_required(*roles):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            if session.get('role') not in roles:
+            user_role = session.get('role')
+            # Superadmin has full access to admin-level routes as well
+            allowed = (user_role in roles) or (user_role == 'superadmin' and 'admin' in roles)
+            if not allowed:
                 if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
                     return jsonify({'error': f'Access restricted. Required role: {", ".join(roles)}'}), 403
                 flash('Insufficient permissions', 'error')
@@ -42,6 +45,7 @@ def role_required(*roles):
             return f(*args, **kwargs)
         return decorated
     return decorator
+
 
 
 # ── QR Code helper ────────────────────────────────────────────────────────────
