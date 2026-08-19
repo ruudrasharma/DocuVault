@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — DOCUVault</title>
-  <meta name="description" content="DocuVault — Blockchain document verification dashboard.">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2.5">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
 </head>
 <body>
@@ -1172,6 +1171,6 @@ async function loadUserList(){
 document.addEventListener('DOMContentLoaded', initDashboard);
 </script>
 
-<script src="{{ url_for('static', filename='script.js') }}"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=2.5"></script>
 </body>
 </html>

@@ -852,43 +852,45 @@ body {
   z-index: 90;
   display: flex;
   flex-direction: column;
-  /* DO NOT use align-items:center — we control centering via padding */
   align-items: stretch;
-  padding: 12px 8px;      /* 8px sides → 60-8-8=44px usable, matches icon container */
-  gap: 2px;
+  padding: 12px 8px;      /* 8px side padding -> 60-16 = 44px usable width */
+  gap: 4px;
   transition: width 0.28s cubic-bezier(0.16,1,0.3,1),
               padding 0.28s cubic-bezier(0.16,1,0.3,1);
   box-shadow: 2px 0 20px rgba(15,23,42,0.06);
-  overflow: visible;       /* let ::after tooltips escape */
+  overflow: visible;
 }
 .nav-ribbon:hover {
   width: 200px;
-  padding: 12px;           /* uniform 12px so items fill 200-12-12=176px */
+  padding: 12px;
 }
 
 /* ── Nav Item ─────────────────────────────────── */
 .nav-item {
   position: relative;
   height: 44px;
-  width: 100%;             /* fills the padded space: 44px when collapsed, 176px when expanded */
+  width: 100%;
   border-radius: var(--r-md);
   display: flex;
   align-items: center;
-  justify-content: center; /* icon centred when collapsed */
+  justify-content: center;
+  gap: 0;
+  padding: 0;
   cursor: pointer;
   color: var(--text-muted);
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s, padding 0.28s cubic-bezier(0.16,1,0.3,1), gap 0.28s cubic-bezier(0.16,1,0.3,1);
   text-decoration: none;
   flex-shrink: 0;
   overflow: visible;
 }
 
-/* Icon always visible and sized */
+/* Icon is fixed size and always centered */
 .nav-item svg {
   flex-shrink: 0;
   min-width: 18px;
   width: 18px;
   height: 18px;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .nav-item:hover {
@@ -906,7 +908,7 @@ body {
 .nav-item.active::before {
   content: '';
   position: absolute;
-  left: -8px;              /* relative to the item; reaches the sidebar's left edge */
+  left: -8px;
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
@@ -915,29 +917,38 @@ body {
   border-radius: 0 3px 3px 0;
   box-shadow: 0 0 12px rgba(79,70,229,0.5);
 }
+.nav-ribbon:hover .nav-item.active::before {
+  left: -12px;
+}
 
 /* Tooltip — appears to the right when sidebar is collapsed */
 .nav-item::after {
   content: attr(title);
   position: absolute;
-  left: calc(100% + 12px);
+  left: calc(100% + 14px);
   top: 50%;
-  transform: translateY(-50%);
-  background: rgba(15,23,42,0.88);
+  transform: translateY(-50%) translateX(-4px);
+  background: rgba(15,23,42,0.92);
   color: #fff;
   font-size: 11px;
   font-family: var(--font-mono);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: 6px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   z-index: 300;
 }
-.nav-ribbon:not(:hover) .nav-item:hover::after { opacity: 1; }
-.nav-ribbon:hover .nav-item::after { display: none; }
+.nav-ribbon:not(:hover) .nav-item:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+.nav-ribbon:hover .nav-item::after {
+  display: none !important;
+}
 
 /* ── Expanded: left-aligned icon + label ─────── */
 .nav-ribbon:hover .nav-item {
@@ -946,18 +957,28 @@ body {
   gap: 12px;
 }
 
-/* ── Label (hidden when collapsed) ──────────── */
+/* ── Label (takes 0 width & hidden when collapsed, expands on hover) ──── */
 .nav-label {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 0.18s 0.05s, transform 0.18s 0.05s;
+  max-width: 0;
+  width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
   pointer-events: none;
+  transform: translateX(-8px);
+  transition: opacity 0.2s cubic-bezier(0.16,1,0.3,1),
+              max-width 0.28s cubic-bezier(0.16,1,0.3,1),
+              transform 0.2s cubic-bezier(0.16,1,0.3,1);
 }
 .nav-ribbon:hover .nav-label {
   opacity: 1;
+  max-width: 140px;
+  width: auto;
+  overflow: visible;
   transform: translateX(0);
 }
 
@@ -1694,9 +1715,13 @@ body {
   }
   .nav-backdrop.visible { display: block; }
 
-  /* Always show labels in mobile drawer */
-  .nav-ribbon .nav-item { width: calc(100% - 24px); justify-content: flex-start; padding: 0 16px; gap: 12px; }
-  .nav-ribbon .nav-label { opacity: 1; transform: none; }
+  /* Collapsed mobile sidebar — show centred icons only */
+  .nav-ribbon .nav-item { width: 100%; justify-content: center; padding: 0; gap: 0; }
+  .nav-ribbon .nav-label { opacity: 0; transform: none; width: 0; overflow: hidden; }
+
+  /* Expanded mobile drawer — show icon + label left-aligned */
+  .nav-ribbon.mobile-open .nav-item { width: calc(100% - 24px); justify-content: flex-start; padding: 0 16px; gap: 12px; }
+  .nav-ribbon.mobile-open .nav-label { opacity: 1; width: auto; overflow: visible; }
 
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .panel-grid { grid-template-columns: 1fr; }
