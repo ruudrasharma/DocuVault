@@ -192,8 +192,9 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
         'autoencoder_anomaly': bool(ae_anomaly),
         'autoencoder_loss': round(float(ae_loss), 4),
         'blockchain_verified': blockchain_valid,
-        'status': 'TAMPER ANOMALY DETECTED' if (ela_tampered or flag_count >= 1) else ('CLEAN' if blockchain_valid else 'UNVERIFIED LEDGER')
+        'status': 'TAMPER ANOMALY DETECTED' if final_anomaly else ('CLEAN' if blockchain_valid else 'UNVERIFIED LEDGER')
     }
+
 
 
     logger.debug(f"Anomaly detection complete for {file_path}: {details}")
