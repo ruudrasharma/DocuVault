@@ -1149,33 +1149,11 @@ async function loadUserList(){
   el.innerHTML='<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px;font-family:var(--font-mono)">Loading…</div>';
   try{
     const res=await fetch('/admin/users');const users=await res.json();
-    const rc={admin:'#DC2626',institution:'#D97706',verifier:'#2563EB',citizen:'#7C3AED'};
-    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-elevated);border-radius:var(--r-md);border:1px solid var(--border);transition:border-color 0.2s" onmouseover="this.style.borderColor='var(--border-glow)'" onmouseout="this.style.borderColor='var(--border)'"><div style="width:34px;height:34px;border-radius:10px;background:${rc[u.role]||'#6B7280'}18;border:1px solid ${rc[u.role]||'#6B7280'}40;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${rc[u.role]||'#6B7280'};font-family:var(--font-mono)">${(u.role||'US').substring(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:10px;color:var(--text-muted)">${u.provider==='google'?'Google OAuth':'Local Auth'} · <span style="color:${rc[u.role]||'#6B7280'};font-weight:600;text-transform:uppercase;letter-spacing:0.05em">${u.role}</span></div></div><div style="display:flex;gap:6px"><button onclick="adminResetPwPrompt(${u.id},'${u.username}')" style="background:var(--cyan-dim);border:1px solid var(--border-glow);border-radius:6px;padding:4px 8px;color:var(--cyan);font-size:10px;cursor:pointer;font-family:var(--font-mono)">RESET PW</button><button onclick="deleteUser(${u.id},'${u.username}')" style="background:var(--danger-dim);border:1px solid rgba(220,38,38,0.2);border-radius:6px;padding:4px 10px;color:var(--danger);font-size:10px;cursor:pointer;font-family:var(--font-mono);transition:all 0.2s">DELETE</button></div></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px;font-family:var(--font-mono)">No accounts found.</div>';
+    const rc={admin:'#DC2626',institution:'#D97706',verifier:'#2563EB',citizen:'#7C3AED',superadmin:'#8B5CF6'};
+    el.innerHTML=users.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-elevated);border-radius:var(--r-md);border:1px solid var(--border);transition:border-color 0.2s" onmouseover="this.style.borderColor='var(--border-glow)'" onmouseout="this.style.borderColor='var(--border)'"><div style="width:34px;height:34px;border-radius:10px;background:${rc[u.role]||'#6B7280'}18;border:1px solid ${rc[u.role]||'#6B7280'}40;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${rc[u.role]||'#6B7280'};font-family:var(--font-mono)">${(u.role||'US').substring(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.username}</div><div style="font-size:10px;color:var(--text-muted)">${u.provider==='google'?'Google OAuth':'Local Auth'} · <span style="color:${rc[u.role]||'#6B7280'};font-weight:600;text-transform:uppercase;letter-spacing:0.05em">${u.role}</span></div></div><div style="display:flex;align-items:center"><span style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);font-family:var(--font-mono)">ACTIVE</span></div></div>`).join('')||'<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px;font-family:var(--font-mono)">No accounts found.</div>';
   }catch(e){el.innerHTML='<div class="flash-msg flash-error" style="margin:0">Failed to load.</div>';}
 }
 
-async function adminResetPwPrompt(id, username){
-  const newPw = prompt(`Enter new password for ${username} (min 6 characters):`);
-  if(!newPw) return;
-  if(newPw.length < 6) { alert('Password must be at least 6 characters.'); return; }
-  try {
-    const res = await fetch(`/admin/reset-password/${id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_password: newPw })
-    });
-    const data = await res.json();
-    if(res.ok) alert(data.message || 'Password reset successfully.');
-    else alert(data.error || 'Failed to reset password.');
-  } catch(e) { alert('Network error'); }
-}
-
-async function deleteUser(id,username){
-  if(!confirm(`Delete "${username}"? This cannot be undone.`)) return;
-  const res=await fetch(`/admin/delete-user/${id}`,{method:'DELETE'});
-  const data=await res.json();
-  if(res.ok) loadUserList(); else alert(data.error||'Delete failed.');
-}
 
 
 // ── Init ───────────────────────────────────────────────────────

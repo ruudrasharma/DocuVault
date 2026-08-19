@@ -364,23 +364,3 @@ def admin_users():
         'email': u.google_email,
         'name': u.google_name,
     } for u in users])
-
-
-@auth_bp.route('/admin/delete-user/<int:user_id>', methods=['DELETE'])
-@login_required
-@role_required('admin')
-def admin_delete_user(user_id):
-    if user_id == session['user_id']:
-        return jsonify({'error': 'Cannot delete your own account.'}), 400
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found.'}), 404
-    # HARDWIRED: superadmin accounts can NEVER be deleted by admin
-    if user.role == 'superadmin':
-        return jsonify({'error': 'Super Admin accounts are protected and cannot be deleted.'}), 403
-    # HARDWIRED: root rudra account can never be deleted
-    if user.username.lower() == 'rudra':
-        return jsonify({'error': 'The root superadmin account cannot be deleted.'}), 403
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({'success': True})
