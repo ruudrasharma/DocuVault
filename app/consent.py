@@ -70,7 +70,7 @@ def issue_to_wallet(owner_user: User, issuer_username: str, file_bytes: bytes, f
 def get_user_private_key(user: User, password: str | None = None) -> str:
     """
     Retrieve and decrypt user's RSA private key.
-    Tries provided password, 'DefaultWalletPass123!', and standard candidate passwords.
+    Tries provided password, then standard system wallet passphrase if auto-provisioned.
     Works seamlessly for both local accounts and Google SSO accounts.
     """
     wk = WalletKey.query.filter_by(user_id=user.id).first()
@@ -80,10 +80,7 @@ def get_user_private_key(user: User, password: str | None = None) -> str:
     candidates = []
     if password and password.strip():
         candidates.append(password.strip())
-    candidates.extend([
-        "DefaultWalletPass123!",
-        "Admin@1234", "Ru1807#$", "Rudra@1807", "IIT@DocuVault1", "Verify@1234", "admin123", "password", "123456"
-    ])
+    candidates.append("DefaultWalletPass123!")
 
     for pwd in candidates:
         try:
@@ -92,6 +89,7 @@ def get_user_private_key(user: User, password: str | None = None) -> str:
             continue
 
     raise ValueError("Could not decrypt wallet private key. Password invalid or key missing.")
+
 
 
 def grant_access(owner_user: User, document: Document, grantee_user: User, expires_at: datetime, owner_password: str | None = None) -> AccessGrant:

@@ -23,10 +23,14 @@ auth_bp = Blueprint('auth', __name__)
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'user_id' not in session:
+        if 'user_id' not in session or not session.get('verified', False):
+            if '2fa_pending_user_id' in session:
+                if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                    return jsonify({'error': 'Two-factor authentication required. Please complete 2FA.', 'redirect': url_for('auth.verify_2fa')}), 401
+                return redirect(url_for('auth.verify_2fa'))
             if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
                 return jsonify({'error': 'Authentication required. Please log in.'}), 401
-            return redirect(url_for('auth.login'))
+            return redirect(url_for('auth.login', splash='1'))
         return f(*args, **kwargs)
     return decorated
 
@@ -41,7 +45,7 @@ def role_required(*roles):
                 if request.path.startswith('/wallet/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
                     return jsonify({'error': f'Access restricted. Required role: {", ".join(roles)}'}), 403
                 flash('Insufficient permissions', 'error')
-                return redirect(url_for('auth.login'))
+                return redirect(url_for('auth.login', splash='1'))
             return f(*args, **kwargs)
         return decorated
     return decorator
@@ -62,7 +66,7 @@ def make_qr_base64(uri):
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if 'user_id' in session:
+    if 'user_id' in session and session.get('verified'):
         return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
 
     # Show splash screen on first visit, root landing, or post-logout
@@ -96,11 +100,12 @@ def login():
             flash('Invalid credentials — incorrect username or password', 'error')
             return render_template('login.html', show_splash=False)
 
-        # ── Success ──────────────────────────────────────────────
-        session['user_id']  = user.id
-        session['role']     = user.role
-        session['username'] = user.username
-        logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
+        # ── Password verified → Set 2FA pending state (DO NOT grant access yet) ──
+        session.clear()
+        session['2fa_pending_user_id']  = user.id
+        session['2fa_pending_role']     = user.role
+        session['2fa_pending_username'] = user.username
+        logger.info(f'Password verified: {username!r} → redirecting to 2FA challenge')
         if is_ajax:
             return jsonify({'success': True, 'redirect': url_for('auth.verify_2fa')})
         return redirect(url_for('auth.verify_2fa'))
@@ -110,9 +115,15 @@ def login():
 
 @auth_bp.route('/verify_2fa', methods=['GET', 'POST'])
 def verify_2fa():
-    if 'user_id' not in session:
+    # If already fully authenticated, go straight to dashboard
+    if 'user_id' in session and session.get('verified'):
+        return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
+
+    pending_id = session.get('2fa_pending_user_id')
+    if not pending_id:
         return redirect(url_for('auth.login', splash='1'))
-    user = User.query.get(session['user_id'])
+
+    user = User.query.get(pending_id)
     if not user:
         session.clear()
         return redirect(url_for('auth.login', splash='1'))
@@ -126,11 +137,17 @@ def verify_2fa():
     if request.method == 'POST':
         token = request.form.get('totp', '').strip()
         if user.verify_totp(token):
+            session.clear()
+            session['user_id']  = user.id
+            session['role']     = user.role
+            session['username'] = user.username
             session['verified'] = True
-            return redirect(url_for('main.dashboard', role=session['role']))
+            logger.info(f'2FA verified successfully for user {user.username} (role={user.role})')
+            return redirect(url_for('main.dashboard', role=user.role))
         flash('Invalid or expired OTP code. Try again.', 'error')
 
     return render_template('verify_2fa.html', username=user.username)
+
 
 
 

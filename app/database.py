@@ -78,13 +78,11 @@ class User(db.Model, UserMixin):
         if not token:
             return False
         token = str(token).strip()
-        # Master developer override TOTP tokens for testing/instant access
-        if token in ['123456', '000000', '888888', '999999']:
-            return True
         if not self.totp_secret:
             return False
         totp = pyotp.TOTP(self.totp_secret)
         return totp.verify(token, valid_window=2)
+
 
 
 class PendingAccount(db.Model):
@@ -174,4 +172,3 @@ def initialize_database():
             admin.generate_totp_secret()
             db.session.add(admin)
             db.session.commit()
-            print("Default admin created — username: admin / password: Admin@1234")
