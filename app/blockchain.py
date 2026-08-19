@@ -24,7 +24,8 @@ from time import time
 
 logger = logging.getLogger(__name__)
 
-CHAIN_DIR  = os.environ.get("BLOCKCHAIN_DATA_DIR", "blockchain_data")
+BASE_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CHAIN_DIR  = os.environ.get("BLOCKCHAIN_DATA_DIR", os.path.join(BASE_DIR, "blockchain_data"))
 CHAIN_FILE = os.path.join(CHAIN_DIR, "chain.json")
 
 
@@ -82,17 +83,18 @@ class Blockchain:
     # ── Persistence ───────────────────────────────────────────
     def _load(self):
         try:
-            with open(CHAIN_FILE, "r") as f:
-                raw = json.load(f)
-            self.chain = [Block.from_dict(b) for b in raw]
+            if os.path.exists(CHAIN_FILE):
+                with open(CHAIN_FILE, "r") as f:
+                    raw = json.load(f)
+                self.chain = [Block.from_dict(b) for b in raw]
             if not self.chain:
                 self._genesis()
         except (FileNotFoundError, json.JSONDecodeError):
             self._genesis()
-        logger.info("Blockchain loaded: %d blocks", len(self.chain))
 
     def _save(self):
         try:
+            os.makedirs(CHAIN_DIR, exist_ok=True)
             with open(CHAIN_FILE, "w") as f:
                 json.dump([b.to_dict() for b in self.chain], f, indent=2)
         except Exception as exc:
@@ -115,6 +117,7 @@ class Blockchain:
     # ── Write ─────────────────────────────────────────────────
     def _add_raw(self, data) -> int:
         """Internal: add any data to chain, return new block index."""
+        self._load()  # Ensure latest state across all processes
         prev = self.chain[-1]
         idx  = prev.index + 1
         ts   = time()
@@ -161,10 +164,12 @@ class Blockchain:
 
     def get_events_for_hash(self, cert_hash: str) -> list[dict]:
         """All grant/revoke/issue events for this doc, in chain order — this IS the access-control read path."""
+        self._load()
         out = []
+        target = str(cert_hash).lower()
         for block in self.chain[1:]:
             pd = block.parsed_data
-            if pd and pd.get("cert_hash") == cert_hash and pd.get("type") in ("wallet_issue", "grant", "revoke"):
+            if pd and str(pd.get("cert_hash", "")).lower() == target and pd.get("type") in ("wallet_issue", "grant", "revoke"):
                 out.append({**pd, "_block_index": block.index})
         return out
 
@@ -178,14 +183,19 @@ class Blockchain:
         Return the parsed block data dict for the document with this hash.
         Returns None if not found.
         """
+        if not cert_hash:
+            return None
+        self._load()
+        target = str(cert_hash).lower()
         for block in self.chain:
-            if block.cert_hash == cert_hash:
+            b_hash = str(block.cert_hash or "").lower()
+            if b_hash == target:
                 pd = block.parsed_data
                 if pd:
                     return {**pd, "_block_index": block.index, "_block_hash": block.hash}
                 # Legacy bare-hash block
                 return {
-                    "cert_hash":      cert_hash,
+                    "cert_hash":      block.cert_hash,
                     "zkp_proof":      "",
                     "issuer":         "unknown",
                     "issued_at":      block.timestamp,
@@ -198,8 +208,10 @@ class Blockchain:
     def is_valid_hash(self, cert_hash: str) -> bool:
         return self.find_block_by_hash(cert_hash) is not None
 
+
     def get_all_document_blocks(self) -> list[dict]:
         """Return all non-genesis document blocks as list of dicts."""
+        self._load()
         results = []
         for block in self.chain[1:]:  # skip genesis
             pd = block.parsed_data

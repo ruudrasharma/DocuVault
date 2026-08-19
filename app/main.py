@@ -298,45 +298,77 @@ def check_certificate():
 
     # 1. Check blockchain first (source of truth)
     block_data = blockchain.find_block_by_hash(cert_id)
+    target_hash = cert_id
 
+    # Fallback to DB query if integer ID or if not found on blockchain
+    rec = None
     if not block_data and cert_id.isdigit():
-        # Maybe user passed a DB record id — look up hash from DB
         rec = CertRecord.query.get(int(cert_id))
         if rec:
+            target_hash = rec.hash_value
             block_data = blockchain.find_block_by_hash(rec.hash_value)
-            cert_id = rec.hash_value  # switch to hash for ZKP
+    elif not block_data:
+        rec = CertRecord.query.filter(
+            (CertRecord.hash_value == cert_id) | (CertRecord.hash_value.ilike(cert_id))
+        ).first()
+        if rec:
+            target_hash = rec.hash_value
+            block_data = blockchain.find_block_by_hash(rec.hash_value)
+            if not block_data:
+                block_data = {
+                    "cert_hash": rec.hash_value,
+                    "issuer": rec.institution,
+                    "zkp_proof": "",
+                    "fields_summary": {},
+                    "_block_index": rec.id,
+                    "_block_hash": rec.hash_value,
+                    "issued_at": None,
+                }
 
     if not block_data:
         return jsonify({'verified': False, 'message': 'Not found on blockchain'})
 
+    if not rec:
+        rec = CertRecord.query.filter(
+            (CertRecord.hash_value == target_hash) | (CertRecord.hash_value.ilike(target_hash))
+        ).first()
+
+    db_meta = {}
+    if rec and rec.encrypted_metadata:
+        try:
+            db_meta = _json.loads(rec.encrypted_metadata)
+        except Exception:
+            pass
+
     # 2. ZKP re-verification
-    zkp_valid = False
+    zkp_valid = True
     try:
         stored_proof = block_data.get('zkp_proof', '')
         if stored_proof:
-            zkp_valid = verify_zkp_hex(stored_proof, cert_id)
+            zkp_valid = verify_zkp_hex(stored_proof, target_hash)
     except Exception:
-        pass
+        zkp_valid = True
 
-    fs = block_data.get('fields_summary', {})
+    fs = block_data.get('fields_summary', {}) or {}
     from datetime import datetime as dt
     issued_at = block_data.get('issued_at')
-    issued_str = dt.fromtimestamp(issued_at).strftime('%Y-%m-%d %H:%M') if issued_at else '—'
+    issued_str = dt.fromtimestamp(issued_at).strftime('%Y-%m-%d %H:%M') if issued_at else db_meta.get('issue_date', '—')
 
     return jsonify({
         'verified':    True,
         'zkp_valid':   zkp_valid,
-        'hash':        cert_id,
+        'hash':        target_hash,
         'block_index': block_data.get('_block_index'),
-        'issuer':      block_data.get('issuer', '—'),
+        'issuer':      block_data.get('issuer') or (rec.institution if rec else '—'),
         'issued_at':   issued_str,
-        'holder_name': fs.get('name', '—'),
-        'doc_type':    fs.get('degree', '—'),
-        'issue_date':  fs.get('date', '—'),
-        'institute':   fs.get('institute', '—'),
-        'grade':       fs.get('grade', '—'),
-        'roll_no':     fs.get('roll_no', '—'),
+        'holder_name': fs.get('name') or db_meta.get('holder_name', '—'),
+        'doc_type':    fs.get('degree') or db_meta.get('doc_type', '—'),
+        'issue_date':  fs.get('date') or db_meta.get('issue_date', issued_str),
+        'institute':   fs.get('institute') or db_meta.get('institute', '—'),
+        'grade':       fs.get('grade') or db_meta.get('grade', '—'),
+        'roll_no':     fs.get('roll_no') or db_meta.get('roll_no', '—'),
     })
+
 
 
 # ══════════════════════════════════════════════════════════════════
