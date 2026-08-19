@@ -348,54 +348,89 @@ def check_certificate():
 @role_required('admin', 'institution', 'verifier')
 def get_certificates():
     """
-    Return all document records, merged from blockchain (primary) and DB (metadata).
-    Blockchain is the source of truth; DB adds holder_name / doc_type metadata.
+    Return all document records.
+    PRIMARY source: CertRecord DB (has real issuer, holder, doc_type).
+    AUGMENTED by: blockchain (adds block_index, zkp, timestamp).
+
+    Legacy blockchain blocks had issuer='legacy' — the old code filtered
+    all of them out for institution users. Fixed by using CertRecord.institution
+    for role-based filtering instead of blockchain.issuer.
     """
     role     = session.get('role')
     username = session.get('username', '')
 
-    # Get all document blocks from blockchain
-    blocks = blockchain.get_all_document_blocks()
+    # ── Build blockchain lookup: hash → block info ────────────────
+    block_map = {}
+    for b in blockchain.get_all_document_blocks():
+        h = b.get('cert_hash', '')
+        if h:
+            block_map[h] = b
 
-    # Build hash→DB meta lookup
-    db_recs = CertRecord.query.order_by(CertRecord.id.desc()).limit(500).all()
-    db_meta_map = {}
+    # ── Primary: CertRecord rows ──────────────────────────────────
+    query = CertRecord.query.order_by(CertRecord.id.desc()).limit(500)
+    db_recs = query.all()
+
+    seen_hashes = set()
+    out = []
+
     for r in db_recs:
+        h = r.hash_value or ''
+
+        # Role filter: institution sees only their own records
+        if role == 'institution' and r.institution != username:
+            continue
+
         meta = {}
         if r.encrypted_metadata:
             try:
                 meta = _json.loads(r.encrypted_metadata)
             except Exception:
                 pass
-        db_meta_map[r.hash_value] = {
-            'db_id':       r.id,
-            'holder_name': meta.get('holder_name', ''),
-            'doc_type':    meta.get('doc_type', ''),
-            'issue_date':  meta.get('issue_date', ''),
-            'filename':    meta.get('filename', ''),
-        }
 
-    out = []
-    for b in blocks:
-        h  = b.get('cert_hash', '')
-        fs = b.get('fields_summary', {})
-        db = db_meta_map.get(h, {})
-        issuer = b.get('issuer', '')
-
-        # Filter by institution role
-        if role == 'institution' and issuer != username:
-            continue
+        # Augment with blockchain data if block exists
+        b = block_map.get(h, {})
+        fs = b.get('fields_summary') or {}
 
         from datetime import datetime as dt
         issued_at  = b.get('issued_at') or b.get('_timestamp')
-        issued_str = dt.fromtimestamp(issued_at).strftime('%Y-%m-%d') if issued_at else '—'
+        issued_str = dt.fromtimestamp(issued_at).strftime('%Y-%m-%d') if issued_at else meta.get('issue_date', '—')
+
+        holder = (fs.get('name') or meta.get('holder_name') or '—')
+        dtype  = (fs.get('degree') or meta.get('doc_type') or '—')
 
         out.append({
-            'id':          db.get('db_id') or b.get('_block_index'),
+            'id':          r.id,
             'hash':        h,
-            'holder_name': fs.get('name') or db.get('holder_name') or '—',
-            'doc_type':    fs.get('degree') or db.get('doc_type') or '—',
-            'issue_date':  fs.get('date') or db.get('issue_date') or issued_str,
+            'holder_name': holder,
+            'doc_type':    dtype,
+            'issue_date':  issued_str,
+            'institution': r.institution,
+            'block_index': b.get('_block_index', '—'),
+            'is_valid':    r.is_valid,
+            'zkp':         bool(b.get('zkp_proof')),
+        })
+        seen_hashes.add(h)
+
+    # ── Fallback: blockchain blocks with NO CertRecord entry ──────
+    # (e.g. very old uploads that bypassed DB write)
+    for h, b in block_map.items():
+        if h in seen_hashes:
+            continue
+        issuer = b.get('issuer', 'unknown')
+        if issuer in ('legacy', 'unknown', ''):
+            issuer = 'unknown'
+        if role == 'institution' and issuer != username:
+            continue
+        fs = b.get('fields_summary') or {}
+        from datetime import datetime as dt
+        issued_at  = b.get('issued_at') or b.get('_timestamp')
+        issued_str = dt.fromtimestamp(issued_at).strftime('%Y-%m-%d') if issued_at else '—'
+        out.append({
+            'id':          b.get('_block_index'),
+            'hash':        h,
+            'holder_name': fs.get('name') or '—',
+            'doc_type':    fs.get('degree') or '—',
+            'issue_date':  issued_str,
             'institution': issuer,
             'block_index': b.get('_block_index'),
             'is_valid':    True,
@@ -403,6 +438,7 @@ def get_certificates():
         })
 
     return jsonify(out)
+
 
 
 # ══════════════════════════════════════════════════════════════════
