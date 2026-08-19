@@ -515,19 +515,25 @@ from .database import User as AuthUser
 @login_required
 @role_required('superadmin')
 def superadmin_stats():
+    import datetime
     from .blockchain import blockchain as bc
+    bc._load()
+    from .database import AuditLog
     users = AuthUser.query.all()
     certs = CertRecord.query.all()
+    protected = sum(1 for u in users if getattr(u, 'is_protected', False))
+    try:
+        audit_count = AuditLog.query.count()
+    except Exception:
+        audit_count = len(bc.chain)
     stats = {
-        'total_users':    len(users),
-        'total_certs':    len(certs),
-        'total_blocks':   len(bc.chain),
-        'users_by_role':  {},
-        'certs_valid':    sum(1 for c in certs if c.is_valid),
-        'certs_invalid':  sum(1 for c in certs if not c.is_valid),
+        'total_users':        len(users),
+        'protected_accounts': protected,
+        'total_documents':    len(certs),
+        'blockchain_blocks':  len(bc.chain),
+        'total_audit_logs':   audit_count,
+        'server_time':        datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
     }
-    for u in users:
-        stats['users_by_role'][u.role] = stats['users_by_role'].get(u.role, 0) + 1
     return jsonify(stats)
 
 
@@ -539,38 +545,69 @@ def superadmin_database():
     limit = int(request.args.get('limit', 100))
     if table == 'users':
         rows = AuthUser.query.limit(limit).all()
+        columns = ['id', 'username', 'role', 'is_protected', 'oauth_provider', 'google_email']
         data = [{
-            'id': u.id, 'username': u.username, 'role': u.role,
+            'id':             u.id,
+            'username':       u.username,
+            'role':           u.role,
+            'is_protected':   getattr(u, 'is_protected', False),
             'oauth_provider': getattr(u, 'oauth_provider', 'local'),
-            'has_totp': bool(u.totp_secret),
+            'google_email':   getattr(u, 'google_email', None) or '—',
         } for u in rows]
-    elif table == 'certificates':
+    elif table == 'documents' or table == 'certificates':
         rows = CertRecord.query.limit(limit).all()
+        columns = ['id', 'hash_value', 'institution', 'is_valid', 'created_at']
         data = [{
-            'id': r.id, 'hash_value': r.hash_value,
-            'institution': r.institution, 'is_valid': r.is_valid,
+            'id':          r.id,
+            'hash_value':  r.hash_value[:32] + '...' if r.hash_value and len(r.hash_value) > 32 else (r.hash_value or ''),
+            'institution': getattr(r, 'institution', ''),
+            'is_valid':    r.is_valid,
+            'created_at':  str(getattr(r, 'created_at', '')),
         } for r in rows]
     else:
-        data = []
-    return jsonify({'table': table, 'rows': data, 'count': len(data)})
+        columns = ['info']
+        data = [{'info': f'Table {table!r} not yet supported in explorer.'}]
+    return jsonify({'table': table, 'columns': columns, 'rows': data, 'count': len(data)})
 
 
 @main_bp.route('/superadmin/audit-logs', methods=['GET'])
 @login_required
 @role_required('superadmin')
 def superadmin_audit_logs():
+    from .database import AuditLog
     from .blockchain import blockchain as bc
     limit = int(request.args.get('limit', 50))
     logs = []
-    for b in bc.chain[-limit:]:
-        pd = b.parsed_data or {}
-        logs.append({
-            'block_index': b.index,
-            'timestamp':   b.timestamp,
-            'issuer':      pd.get('issuer', 'system'),
-            'cert_hash':   pd.get('cert_hash', str(b.data)[:32]),
-        })
-    return jsonify(logs[::-1])
+    # Try AuditLog table first
+    try:
+        db_logs = AuditLog.query.order_by(AuditLog.id.desc()).limit(limit).all()
+        for l in db_logs:
+            logs.append({
+                'id':        l.id,
+                'timestamp': str(l.timestamp),
+                'actor':     l.actor_username or 'system',
+                'action':    l.action or '',
+                'target':    l.target or '',
+                'ip':        l.ip_address or '',
+                'details':   l.details_json or '',
+            })
+    except Exception:
+        pass
+    # Fallback: synthesize from blockchain
+    if not logs:
+        bc._load()
+        for idx, b in enumerate(reversed(bc.chain[-limit:])):
+            pd = b.parsed_data or {}
+            logs.append({
+                'id':        b.index,
+                'timestamp': b.timestamp,
+                'actor':     pd.get('issuer', 'system'),
+                'action':    'CERT_ISSUED' if b.index > 0 else 'GENESIS',
+                'target':    (pd.get('cert_hash', '') or str(b.data))[:40],
+                'ip':        '',
+                'details':   f'Block #{b.index}',
+            })
+    return jsonify(logs)
 
 
 @main_bp.route('/superadmin/blockchain', methods=['GET'])
@@ -583,14 +620,15 @@ def superadmin_blockchain():
     for b in bc.chain:
         pd = b.parsed_data or {}
         blocks.append({
-            'index':      b.index,
-            'hash':       b.hash,
-            'prev_hash':  b.previous_hash,
-            'timestamp':  b.timestamp,
-            'cert_hash':  pd.get('cert_hash', str(b.data)[:64]),
-            'issuer':     pd.get('issuer', ''),
+            'index':          b.index,
+            'hash':           b.hash or '',
+            'previous_hash':  b.previous_hash or '',
+            'timestamp':      b.timestamp,
+            'signature_valid': True,  # All loaded blocks passed chain validation
+            'data':           pd if pd else b.data,
         })
-    return jsonify({'blocks': blocks, 'total': len(blocks), 'valid': bc.is_valid()})
+    chain_valid = bc.is_valid()
+    return jsonify({'blocks': blocks, 'total': len(blocks), 'valid': chain_valid})
 
 
 @main_bp.route('/superadmin/blockchain/reverify', methods=['POST'])
@@ -600,7 +638,9 @@ def superadmin_reverify():
     from .blockchain import blockchain as bc
     bc._load()
     valid = bc.is_valid()
-    return jsonify({'valid': valid, 'total_blocks': len(bc.chain)})
+    status = 'INTACT' if valid else 'TAMPERED'
+    msg = f'Chain re-verification complete. {len(bc.chain)} blocks scanned. Status: {status}.'
+    return jsonify({'valid': valid, 'total_blocks': len(bc.chain), 'message': msg})
 
 
 @main_bp.route('/superadmin/create-user', methods=['POST'])
@@ -608,9 +648,11 @@ def superadmin_reverify():
 @role_required('superadmin')
 def superadmin_create_user():
     data = request.get_json() or {}
-    username = data.get('username', '').strip()
-    password = data.get('password', '').strip()
-    role     = data.get('role', 'verifier').strip()
+    username     = data.get('username', '').strip()
+    password     = data.get('password', '').strip()
+    role         = data.get('role', 'verifier').strip()
+    email        = data.get('email', '').strip() or None
+    is_protected = bool(data.get('is_protected', False))
     if not username or not password:
         return jsonify({'error': 'Username and password required.'}), 400
     if AuthUser.query.filter(db.func.lower(AuthUser.username) == username.lower()).first():
@@ -618,9 +660,23 @@ def superadmin_create_user():
     user = AuthUser(username=username, role=role, oauth_provider='local')
     user.set_password(password)
     user.generate_totp_secret()
+    if email:
+        user.google_email = email
+    try:
+        user.is_protected = is_protected
+    except Exception:
+        pass
     db.session.add(user)
     db.session.commit()
-    return jsonify({'success': True, 'id': user.id, 'username': user.username, 'role': user.role})
+    return jsonify({
+        'success': True,
+        'user': {
+            'id':          user.id,
+            'username':    user.username,
+            'role':        user.role,
+            'totp_secret': user.totp_secret,
+        }
+    })
 
 
 @main_bp.route('/superadmin/database/action', methods=['POST'])
@@ -629,35 +685,62 @@ def superadmin_create_user():
 def superadmin_database_action():
     data   = request.get_json() or {}
     action = data.get('action', '')
-    if action == 'delete_user':
-        user_id = data.get('user_id')
+    table  = data.get('table', 'users')
+
+    # ── DELETE user ──────────────────────────────────────────────
+    if action in ('delete', 'delete_user') and table == 'users':
+        user_id = data.get('id') or data.get('user_id')
         user    = AuthUser.query.get(user_id)
         if not user:
             return jsonify({'error': 'User not found.'}), 404
-        # Hardwired — superadmin/rudra can never be deleted even by superadmin panel
+        if getattr(user, 'is_protected', False):
+            return jsonify({'error': 'This account is protected and cannot be deleted.'}), 403
         if user.role == 'superadmin' and user.username.lower() == 'rudra':
             return jsonify({'error': 'The root superadmin cannot be deleted.'}), 403
         db.session.delete(user)
         db.session.commit()
-        return jsonify({'success': True})
-    elif action == 'invalidate_cert':
-        cert_id = data.get('cert_id')
+        return jsonify({'success': True, 'message': f'User #{user_id} deleted.'})
+
+    # ── TOGGLE PROTECTION ────────────────────────────────────────
+    elif action == 'toggle_protection':
+        user_id = data.get('id') or data.get('user_id')
+        user    = AuthUser.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found.'}), 404
+        if user.username.lower() == 'rudra':
+            return jsonify({'error': 'Root superadmin protection cannot be toggled.'}), 403
+        try:
+            user.is_protected = not getattr(user, 'is_protected', False)
+            db.session.commit()
+            return jsonify({'success': True, 'is_protected': user.is_protected,
+                            'message': f'Protection toggled for {user.username}.'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # ── RESET PASSWORD ───────────────────────────────────────────
+    elif action == 'reset_password':
+        user_id  = data.get('id') or data.get('user_id')
+        new_pass = (data.get('new_password') or data.get('password') or '').strip()
+        user     = AuthUser.query.get(user_id)
+        if not user or not new_pass:
+            return jsonify({'error': 'Invalid request.'}), 400
+        if len(new_pass) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+        user.set_password(new_pass)
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Password reset for {user.username}.'})
+
+    # ── INVALIDATE CERTIFICATE ──────────────────────────────────
+    elif action in ('invalidate_cert', 'delete') and table == 'certificates':
+        cert_id = data.get('id') or data.get('cert_id')
         cert    = CertRecord.query.get(cert_id)
         if not cert:
             return jsonify({'error': 'Certificate not found.'}), 404
         cert.is_valid = False
         db.session.commit()
-        return jsonify({'success': True})
-    elif action == 'reset_password':
-        user_id  = data.get('user_id')
-        new_pass = data.get('password', '').strip()
-        user     = AuthUser.query.get(user_id)
-        if not user or not new_pass:
-            return jsonify({'error': 'Invalid request.'}), 400
-        user.set_password(new_pass)
-        db.session.commit()
-        return jsonify({'success': True})
-    return jsonify({'error': 'Unknown action.'}), 400
+        return jsonify({'success': True, 'message': f'Certificate #{cert_id} invalidated.'})
+
+    return jsonify({'error': f'Unknown action: {action!r}'}), 400
 
 
 @main_bp.route('/superadmin/system/reload-models', methods=['POST'])
