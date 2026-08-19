@@ -173,12 +173,12 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
     flag_count = sum([ela_tampered, image_pred, text_pred, ae_anomaly])
     
     if blockchain_valid:
-        # For genuine blockchain-verified documents, flag if physical pixel editing/splicing (ELA >22%)
+        # Genuine blockchain-verified document: flag if physical pixel editing/splicing (ELA >22%)
         # or if at least 2 AI models agree on anomaly.
         final_anomaly = bool(ela_tampered or (flag_count >= 2))
     else:
-        # Unverified / unregistered documents: any strong anomaly triggers tamper alert.
-        final_anomaly = bool(ela_tampered or flag_count >= 1)
+        # Unverified / unregistered documents: flagged as potential forgery risk
+        final_anomaly = True
 
     combined_score = max(image_score, text_score, float(ela_score * 3.0), float(ae_loss))
 
@@ -192,8 +192,9 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
         'autoencoder_anomaly': bool(ae_anomaly),
         'autoencoder_loss': round(float(ae_loss), 4),
         'blockchain_verified': blockchain_valid,
-        'status': 'ANOMALY DETECTED' if final_anomaly else 'CLEAN'
+        'status': 'TAMPER ANOMALY DETECTED' if (ela_tampered or flag_count >= 1) else ('CLEAN' if blockchain_valid else 'UNVERIFIED LEDGER')
     }
+
 
     logger.debug(f"Anomaly detection complete for {file_path}: {details}")
     return final_anomaly, combined_score, details

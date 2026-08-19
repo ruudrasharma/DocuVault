@@ -959,6 +959,7 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
        </div>`;
 
     const renderAiCard = (data) => {
+      const isVerified = data.verified || false;
       const isAnomaly = data.anomaly_analysis ? data.anomaly_analysis.is_anomaly : (data.anomaly_detected || false);
       const elaTampered = data.anomaly_analysis ? data.anomaly_analysis.ela_tampered : (data.ela_tampered || false);
       const elaRatio = data.anomaly_analysis?.ela_pixel_ratio || 0.0;
@@ -967,15 +968,23 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
       const imageAnomaly = data.anomaly_analysis?.image_anomaly || false;
       const aeAnomaly = data.anomaly_analysis?.autoencoder_anomaly || false;
       const aeLoss = data.anomaly_analysis?.autoencoder_loss || 0.0;
+      const hasRisk = isAnomaly || !isVerified;
+
+      let badgeText = '✓ AI VERIFIED CLEAN';
+      if (!isVerified) {
+        badgeText = '⚠️ UNVERIFIED / FORGERY RISK';
+      } else if (isAnomaly) {
+        badgeText = '⚠️ TAMPER RISK DETECTED';
+      }
 
       return `
-        <div style="margin-top:12px;padding:12px;border-radius:8px;background:${isAnomaly ? 'rgba(220,38,38,0.1)' : 'rgba(5,150,105,0.08)'};border:1px solid ${isAnomaly ? 'rgba(220,38,38,0.3)' : 'rgba(5,150,105,0.25)'}">
+        <div style="margin-top:12px;padding:12px;border-radius:8px;background:${hasRisk ? 'rgba(220,38,38,0.1)' : 'rgba(5,150,105,0.08)'};border:1px solid ${hasRisk ? 'rgba(220,38,38,0.3)' : 'rgba(5,150,105,0.25)'}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:${isAnomaly ? 'var(--danger)' : 'var(--green)'};display:flex;align-items:center;gap:6px">
+            <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:${hasRisk ? 'var(--danger)' : 'var(--green)'};display:flex;align-items:center;gap:6px">
               <span style="font-size:14px">🤖</span> AI ANOMALY &amp; ELA TAMPER ANALYSIS
             </div>
-            <span style="font-size:10px;padding:3px 8px;border-radius:12px;background:${isAnomaly ? 'var(--danger)' : 'var(--green)'};color:#fff;font-weight:700;font-family:var(--font-mono)">
-              ${isAnomaly ? '⚠️ TAMPER RISK DETECTED' : '✓ AI VERIFIED CLEAN'}
+            <span style="font-size:10px;padding:3px 8px;border-radius:12px;background:${hasRisk ? 'var(--danger)' : 'var(--green)'};color:#fff;font-weight:700;font-family:var(--font-mono)">
+              ${badgeText}
             </span>
           </div>
 
@@ -1002,6 +1011,7 @@ document.getElementById('verify-file-form-el')?.addEventListener('submit', async
         </div>
       `;
     };
+
 
     if (d.verified) {
       resultEl.innerHTML = `
