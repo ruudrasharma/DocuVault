@@ -371,6 +371,12 @@ def admin_delete_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found.'}), 404
+    # HARDWIRED: superadmin accounts can NEVER be deleted by admin
+    if user.role == 'superadmin':
+        return jsonify({'error': 'Super Admin accounts are protected and cannot be deleted.'}), 403
+    # HARDWIRED: root rudra account can never be deleted
+    if user.username.lower() == 'rudra':
+        return jsonify({'error': 'The root superadmin account cannot be deleted.'}), 403
     db.session.delete(user)
     db.session.commit()
     return jsonify({'success': True})
