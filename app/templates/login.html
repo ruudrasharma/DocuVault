@@ -7,34 +7,6 @@
   <meta name="description" content="DocuVault — Blockchain-powered document verification. Secure sign-in portal.">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
-  <style>
-    @keyframes cardShake {
-      0%, 100% { transform: translateX(0); }
-      15%, 45%, 75% { transform: translateX(-8px); }
-      30%, 60%, 90% { transform: translateX(8px); }
-    }
-    .shake {
-      animation: cardShake 0.45s ease-in-out both;
-    }
-    .flash-msg-ajax {
-      background: rgba(220, 38, 38, 0.1);
-      border: 1px solid rgba(220, 38, 38, 0.3);
-      color: var(--danger);
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: var(--font-mono);
-      animation: fadeIn 0.2s ease-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  </style>
 </head>
 <body>
 
@@ -43,10 +15,10 @@
 <div class="orb orb-1"></div>
 <div class="orb orb-2"></div>
 <div class="orb orb-3"></div>
+<div class="scanlines"></div>
 <canvas class="particles-canvas" id="particles"></canvas>
 
-{% if show_splash %}
-<!-- Splash Screen (Only on initial root landing / post-logout) -->
+<!-- Splash Screen -->
 <div id="splash">
   <div class="splash-logo">
     <div class="splash-logo-mark">
@@ -87,20 +59,19 @@
     </div>
   </div>
 </div>
-{% endif %}
 
 <!-- Login Page -->
 <div class="login-wrap" style="z-index:10">
-  <div class="login-card" id="login-card">
+  <div class="login-card">
 
     <!-- Header -->
     <div class="login-header">
       <div class="login-logo-icon">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="var(--cyan)" stroke-width="1.5" stroke-linejoin="round"/>
-          <polyline points="14 2 14 8 20 8" stroke="var(--cyan)" stroke-width="1.5" stroke-linejoin="round"/>
-          <circle cx="16" cy="17" r="3" stroke="var(--green)" stroke-width="1.5"/>
-          <path d="M14 17l1 1 2.5-2.5" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#00D4FF" stroke-width="1.5" stroke-linejoin="round"/>
+          <polyline points="14 2 14 8 20 8" stroke="#00D4FF" stroke-width="1.5" stroke-linejoin="round"/>
+          <circle cx="16" cy="17" r="3" stroke="#00FF88" stroke-width="1.5"/>
+          <path d="M14 17l1 1 2.5-2.5" stroke="#00FF88" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
       <h1 class="login-title">DOCUVAULT</h1>
@@ -115,9 +86,6 @@
 
     <!-- Body -->
     <div class="login-body">
-
-      <!-- In-place error message container (AJAX without page reload) -->
-      <div id="ajax-err-msg" class="flash-msg-ajax" style="display:none"></div>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
@@ -134,12 +102,12 @@
         {% endfor %}
       {% endwith %}
 
-      <form id="login-form" method="POST" action="/login">
+      <form method="POST" action="/login">
         <div class="form-group">
           <label class="form-label">Identity</label>
           <div class="form-input-wrap">
             <input id="username" name="username" type="text" class="form-input"
-              placeholder="Enter username or email" autocomplete="username" required>
+              placeholder="Enter your username" autocomplete="username" required>
             <svg class="form-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
             </svg>
@@ -198,7 +166,6 @@
 // ── Particles ──────────────────────────────────────────────────
 (function() {
   const canvas = document.getElementById('particles');
-  if (!canvas) return;
   const ctx = canvas.getContext('2d');
   let W, H, pts = [];
   function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
@@ -216,13 +183,14 @@
       if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
       if(p.a<0.1||p.a>0.9) p.da*=-1;
       ctx.beginPath(); ctx.arc(p.x%W, p.y%H, p.r, 0, Math.PI*2);
-      ctx.fillStyle = `rgba(37,99,235,${Math.max(0.05,Math.min(0.4,p.a))})`;
+      ctx.fillStyle = `rgba(0,212,255,${Math.max(0.05,Math.min(0.6,p.a))})`;
       ctx.fill();
     });
+    // Connect nearby
     for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++) {
       const dx=pts[i].x-pts[j].x, dy=pts[i].y-pts[j].y, d=Math.sqrt(dx*dx+dy*dy);
       if(d<120) { ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y);
-        ctx.strokeStyle=`rgba(37,99,235,${0.08*(1-d/120)})`; ctx.lineWidth=0.5; ctx.stroke(); }
+        ctx.strokeStyle=`rgba(0,212,255,${0.12*(1-d/120)})`; ctx.lineWidth=0.5; ctx.stroke(); }
     }
     requestAnimationFrame(draw);
   }
@@ -230,12 +198,12 @@
 })();
 
 // ── Splash dismiss ─────────────────────────────────────────────
-const splash = document.getElementById('splash');
-if (splash) {
+window.addEventListener('load', () => {
   setTimeout(() => {
-    splash.classList.add('hidden');
-  }, 2800);
-}
+    const s = document.getElementById('splash');
+    if(s) s.classList.add('hidden');
+  }, 3600);
+});
 
 // ── Password toggle ────────────────────────────────────────────
 function togglePw() {
@@ -248,61 +216,14 @@ function togglePw() {
     : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
 }
 
-// ── AJAX Login (No page reload / No splash screen on error) ───
-document.getElementById('login-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
+// ── Signin button loading ──────────────────────────────────────
+document.querySelector('form').addEventListener('submit', function() {
   const btn = document.getElementById('signin-btn');
-  const btnText = document.getElementById('btn-text');
-  const errBox = document.getElementById('ajax-err-msg');
-  const card = document.getElementById('login-card');
-
-  const username = document.getElementById('username').value.trim();
-  const password = document.getElementById('password').value;
-
-  errBox.style.display = 'none';
-  btn.disabled = true;
-  btnText.textContent = '▶ AUTHENTICATING...';
-
-  try {
-    const res = await fetch('/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({ username, password })
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      btnText.textContent = '✓ SUCCESS — REDIRECTING...';
-      window.location.href = data.redirect || '/verify_2fa';
-    } else {
-      errBox.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        ${data.error || 'Invalid credentials'}
-      `;
-      errBox.style.display = 'flex';
-      card.classList.add('shake');
-      setTimeout(() => card.classList.remove('shake'), 500);
-      btn.disabled = false;
-      btnText.textContent = '⟶ AUTHENTICATE';
-    }
-  } catch (err) {
-    errBox.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      Network error. Please try again.
-    `;
-    errBox.style.display = 'flex';
-    btn.disabled = false;
-    btnText.textContent = '⟶ AUTHENTICATE';
-  }
+  btn.style.opacity = '0.7';
+  document.getElementById('btn-text').textContent = '▶ AUTHENTICATING...';
 });
 
-// ── Animate cards on load ──────────────────────────────────────
+// ── Animate cards on splash out ────────────────────────────────
 setTimeout(() => {
   document.querySelectorAll('.login-card').forEach((el,i) => {
     el.style.animationDelay = (i*0.08)+'s';

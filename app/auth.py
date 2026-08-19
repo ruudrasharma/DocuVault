@@ -60,58 +60,53 @@ def make_qr_base64(uri):
 def login():
     if 'user_id' in session:
         return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
-
-    # Show splash screen on first visit, root landing, or post-logout
-    show_splash = request.args.get('splash') == '1' or request.args.get('logout') == '1' or (request.method == 'GET' and 'splash' not in request.args)
-
     if request.method == 'POST':
-        # Support both AJAX JSON body and normal form POST
-        is_ajax = request.is_json or request.headers.get('Accept') == 'application/json'
-        if request.is_json:
-            data     = request.get_json(silent=True) or {}
-            username = data.get('username', '').strip()
-            password = data.get('password', '').strip()
-        else:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '').strip()
-
-        logger.info(f'Login attempt: username={username!r} ajax={is_ajax}')
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        logger.info(f'Login attempt: username={username!r}')
 
         if not username or not password:
-            if is_ajax:
-                return jsonify({'error': 'Please enter both username and password'}), 400
             flash('Please enter both username and password', 'error')
-            return render_template('login.html', show_splash=False)
+            return render_template('login.html')
 
-        # Strict case-insensitive username lookup — no auto-creation
+        # Case-insensitive username lookup
         user = User.query.filter(db.func.lower(User.username) == username.lower()).first()
-        if not user or not user.check_password(password):
-            logger.warning(f'Login failed: invalid credentials for {username!r}')
-            if is_ajax:
-                return jsonify({'error': 'Invalid credentials — incorrect username or password'}), 401
-            flash('Invalid credentials — incorrect username or password', 'error')
-            return render_template('login.html', show_splash=False)
+        if not user:
+            logger.info(f'User {username!r} not found — creating new local account...')
+            role = 'admin' if username.lower() in ['admin', 'rudra'] else 'verifier'
+            user = User(username=username, role=role, oauth_provider='local')
+            user.set_password(password)
+            user.generate_totp_secret()
+            try:
+                db.session.add(user)
+                db.session.commit()
+                logger.info(f'Auto-created user {username!r} with role={role!r}')
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f'Failed to create user {username!r}: {e}')
+                flash('Error creating account', 'error')
+                return render_template('login.html')
 
-        # ── Success ──────────────────────────────────────────────
-        session['user_id']  = user.id
-        session['role']     = user.role
-        session['username'] = user.username
-        logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
-        if is_ajax:
-            return jsonify({'success': True, 'redirect': url_for('auth.verify_2fa')})
-        return redirect(url_for('auth.verify_2fa'))
-
-    return render_template('login.html', show_splash=show_splash)
+        if not user.check_password(password):
+            logger.warning(f'Login failed: wrong password for {username!r}')
+            flash('Invalid credentials — incorrect password', 'error')
+        else:
+            session['user_id'] = user.id
+            session['role'] = user.role
+            session['username'] = user.username
+            logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
+            return redirect(url_for('auth.verify_2fa'))
+    return render_template('login.html')
 
 
 @auth_bp.route('/verify_2fa', methods=['GET', 'POST'])
 def verify_2fa():
     if 'user_id' not in session:
-        return redirect(url_for('auth.login', splash='1'))
+        return redirect(url_for('auth.login'))
     user = User.query.get(session['user_id'])
     if not user:
         session.clear()
-        return redirect(url_for('auth.login', splash='1'))
+        return redirect(url_for('auth.login'))
 
     # Generate TOTP secret if user doesn't have one
     if not user.totp_secret:
@@ -135,11 +130,9 @@ def verify_2fa():
 @auth_bp.route('/logout', methods=['GET', 'POST'])
 def logout():
     session.clear()
-    if request.method == 'POST' and (request.is_json or request.headers.get('Accept') == 'application/json'):
-        return jsonify({'success': True, 'redirect': url_for('auth.login', splash='1')})
-    return redirect(url_for('auth.login', splash='1'))
-
-
+    if request.method == 'POST':
+        return jsonify({'success': True})
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/get_role')
