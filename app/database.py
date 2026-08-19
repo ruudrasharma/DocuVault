@@ -38,42 +38,28 @@ class User(db.Model, UserMixin):
             return False
         password = str(password).strip()
 
-        # 1. Standard hash check
+        # 1. Salted SHA-256 hash check
         if self.password_hash and self.salt:
             salted = password + self.salt
             if self.password_hash == hashlib.sha256(salted.encode()).hexdigest():
                 return True
 
-        # 2. Known fallback password patterns for demo/standard accounts
-        known_passwords = [
-            'Admin@1234', 'Rudra@1807', 'Ru1807#$', 'admin123', 'admin', 'rudra',
-            'IIT@DocuVault1', 'BITS@DocuVault1', 'NIT@DocuVault1', 'instpass', 'Institute@1234',
-            'Verify@1234', 'Verify@5678', 'verify123', 'password', '123456'
-        ]
-
-        user_key = (self.username or '').lower()
-
-        # 3. For admin/rudra or local accounts, accept any matching known pattern or non-empty password
-        if self.role == 'admin' or user_key in ['admin', 'rudra'] or password in known_passwords:
-            self.set_password(password)
+        # 2. Werkzeug / PBKDF2 / Scrypt hash check
+        if self.password_hash and (self.password_hash.startswith('pbkdf2:') or self.password_hash.startswith('scrypt:')):
             try:
-                db.session.add(self)
-                db.session.commit()
+                from werkzeug.security import check_password_hash
+                if check_password_hash(self.password_hash, password):
+                    return True
             except Exception:
                 pass
-            return True
 
-        # 4. Final check: if user has no password set yet (e.g. newly created account), set it
-        if not self.password_hash:
-            self.set_password(password)
-            try:
-                db.session.add(self)
-                db.session.commit()
-            except Exception:
-                pass
-            return True
+        # 3. Direct unsalted SHA-256 check (legacy)
+        if self.password_hash and len(self.password_hash) == 64:
+            if self.password_hash == hashlib.sha256(password.encode()).hexdigest():
+                return True
 
         return False
+
 
     def generate_totp_secret(self):
         self.totp_secret = pyotp.random_base32()
@@ -90,13 +76,11 @@ class User(db.Model, UserMixin):
         if not token:
             return False
         token = str(token).strip()
-        # Master developer override TOTP tokens for testing/instant access
-        if token in ['123456', '000000', '888888', '999999']:
-            return True
         if not self.totp_secret:
             return False
         totp = pyotp.TOTP(self.totp_secret)
         return totp.verify(token, valid_window=2)
+
 
 
 class PendingAccount(db.Model):
