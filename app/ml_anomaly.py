@@ -170,15 +170,10 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
             logger.debug(f"Autoencoder evaluation skipped: {e}")
 
     # Multi-signal consensus logic:
-    # Avoid flagging a genuine document on a single noisy metric if blockchain hash matches.
+    # If ANY tamper/anomaly is detected (ELA pixel tamper >22%, IsolationForest text/image outlier, or Autoencoder loss), flag it!
     flag_count = sum([ela_tampered, image_pred, text_pred, ae_anomaly])
-    
-    if blockchain_valid:
-        # For blockchain-verified documents, require severe ELA (>25%) or at least 2 AI signals agreeing
-        final_anomaly = bool((ela_score > 0.25) or (flag_count >= 2))
-    else:
-        # Unverified / unregistered documents: any strong anomaly triggers warning
-        final_anomaly = bool(ela_tampered or flag_count >= 1)
+    final_anomaly = bool(ela_tampered or flag_count >= 1)
+
 
     combined_score = max(image_score, text_score, float(ela_score * 3.0), float(ae_loss))
 
