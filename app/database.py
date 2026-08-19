@@ -21,6 +21,8 @@ class User(db.Model, UserMixin):
     google_email = db.Column(db.String(120), nullable=True)
     google_name = db.Column(db.String(120), nullable=True)
     google_avatar = db.Column(db.String(500), nullable=True)
+    is_protected = db.Column(db.Boolean, default=False)
+
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -133,12 +135,28 @@ class AccessGrant(db.Model):
     revoked_block_index = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+class AuditLog(db.Model):
+    """Immutable audit trail for all sensitive administrative and system actions."""
+    __tablename__ = 'audit_log'
+    id = db.Column(db.Integer, primary_key=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    actor_username = db.Column(db.String(120), nullable=False)
+    action = db.Column(db.String(100), nullable=False)
+    target = db.Column(db.String(255), nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    details_json = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+
+
+
 class WalletKey(db.Model):
     __tablename__ = 'wallet_key'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
     public_key_pem = db.Column(db.Text, nullable=False)
-    encrypted_private_key = db.Column(db.Text, nullable=False)  # private key encrypted w/ password-derived key
+    encrypted_private_key = db.Column(db.Text, nullable=False)
     kdf_salt = db.Column(db.String(64), nullable=False)
 
 

@@ -53,11 +53,13 @@ from .main import main_bp
 from .auth import auth_bp
 from .routes_wallet import wallet_bp
 from .routes_citizen import citizen_bp
+from .superadmin import superadmin_bp
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(wallet_bp)
 app.register_blueprint(citizen_bp)
+app.register_blueprint(superadmin_bp)
 
 # Import models and initialize database
 with app.app_context():
@@ -73,6 +75,7 @@ with app.app_context():
                 ('google_email',   'VARCHAR(120)'),
                 ('google_name',    'VARCHAR(120)'),
                 ('google_avatar',  'VARCHAR(500)'),
+                ('is_protected',   'BOOLEAN DEFAULT 0'),
             ]:
                 try:
                     conn.execute(text(f'ALTER TABLE user ADD COLUMN {col} {definition}'))
@@ -82,6 +85,7 @@ with app.app_context():
                     pass  # Column already exists
     except Exception as e:
         logger.warning(f'Migration check skipped: {e}')
+
 
 @login_manager.user_loader
 def load_user(user_id):
