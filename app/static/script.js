@@ -767,29 +767,25 @@ async function initializeDashboard() {
 
 // ── Citizen Wallet Engine ───────────────────────────────────
 function switchWalletTab(tab) {
-  const role = state.currentRole || window._currentRole || '';
-  const allowed = (role === 'citizen' || role === 'verifier' || role === 'admin');
-
   ['docs', 'grants', 'received'].forEach(t => {
     const el = document.getElementById(`wallet-${t}-tab`);
     const btn = document.getElementById(`wtab-${t}`);
 
     if (btn) {
-      btn.style.display = allowed ? 'block' : 'none';
-      if (allowed) {
-        btn.className = t === tab ? 'btn-action btn-cyan' : 'btn-action';
-        btn.style.background = t === tab ? '' : 'transparent';
-        btn.style.borderColor = t === tab ? '' : 'var(--border)';
-        btn.style.color = t === tab ? '' : 'var(--text-muted)';
-      }
+      btn.style.display = 'block';
+      btn.className = t === tab ? 'btn-action btn-cyan' : 'btn-action';
+      btn.style.background = t === tab ? '' : 'transparent';
+      btn.style.borderColor = t === tab ? '' : 'var(--border)';
+      btn.style.color = t === tab ? '' : 'var(--text-muted)';
     }
-    if (el) el.style.display = (t === tab && allowed) ? 'block' : 'none';
+    if (el) el.style.display = (t === tab) ? 'block' : 'none';
   });
 
   if (tab === 'docs') loadMyDocuments();
   if (tab === 'grants') loadMyGrants();
   if (tab === 'received') loadReceivedDocuments();
 }
+
 
 async function loadMyDocuments() {
   const el = document.getElementById('wallet-docs-list');
@@ -1082,13 +1078,23 @@ function showSectionsForRole(role) {
 window.addEventListener('DOMContentLoaded', initializeDashboard);
 
 // Expose globals for inline onclick handlers
-window.uploadFile     = uploadFile;
-window.verifyFile     = verifyFile;
-window.getUsers       = getUsers;
-window.recover2FA     = recover2FA;
-window.addLegacyRecord = addLegacyRecord;
-window.logout         = logout;
-window.copyToClipboard = copyToClipboard;
-window.switchPanel    = switchPanel;
-window.selectVerifyMode = selectVerifyMode;
-window.CommandPalette = CommandPalette;
+window.uploadFile            = uploadFile;
+window.verifyFile            = verifyFile;
+window.getUsers              = getUsers;
+window.recover2FA            = recover2FA;
+window.addLegacyRecord       = addLegacyRecord;
+window.logout                = logout;
+window.copyToClipboard       = copyToClipboard;
+window.switchPanel           = switchPanel;
+window.selectVerifyMode      = selectVerifyMode;
+window.CommandPalette        = CommandPalette;
+window.switchWalletTab       = switchWalletTab;
+window.loadMyDocuments       = loadMyDocuments;
+window.loadMyGrants          = loadMyGrants;
+window.loadReceivedDocuments = loadReceivedDocuments;
+window.openShareModal        = openShareModal;
+window.closeShareModal       = closeShareModal;
+window.submitShareDocument   = submitShareDocument;
+window.downloadWalletDoc     = downloadWalletDoc;
+window.loadAuditTrail        = loadAuditTrail;
+window.revokeGrant           = revokeGrant;
