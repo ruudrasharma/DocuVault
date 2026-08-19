@@ -315,6 +315,9 @@ class Blockchain:
                 return False
         return True
 
+    is_valid = is_chain_valid
+
+
     def stats(self) -> dict:
         doc_blocks = [b for b in self.chain[1:] if b.cert_hash]
         return {
