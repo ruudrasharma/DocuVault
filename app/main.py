@@ -27,8 +27,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def index():
     if 'user_id' in session:
         return redirect(url_for('main.dashboard', role=session.get('role')))
-    return redirect(url_for('auth.login'))
-
+    return redirect(url_for('auth.login', splash='1'))
 
 
 
