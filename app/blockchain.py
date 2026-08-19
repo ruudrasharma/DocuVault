@@ -133,13 +133,15 @@ class Blockchain:
         zkp_proof: str,
         issuer: str,
         fields_summary: dict | None = None,
+        file_hash: str | None = None,
     ) -> int:
         """
-        Add a document record block.
+        Add a document record block with dual-hash support (OCR hash + raw file SHA-256).
         Returns the new block index.
         """
         payload = {
             "cert_hash":      cert_hash,
+            "file_hash":      file_hash or "",
             "zkp_proof":      zkp_proof,
             "issuer":         issuer,
             "issued_at":      time(),
@@ -166,11 +168,14 @@ class Blockchain:
         """All grant/revoke/issue events for this doc, in chain order — this IS the access-control read path."""
         self._load()
         out = []
-        target = str(cert_hash).lower()
+        target = str(cert_hash).lower().strip()
         for block in self.chain[1:]:
             pd = block.parsed_data
-            if pd and str(pd.get("cert_hash", "")).lower() == target and pd.get("type") in ("wallet_issue", "grant", "revoke"):
-                out.append({**pd, "_block_index": block.index})
+            if pd:
+                b_ocr = str(pd.get("cert_hash", "")).lower().strip()
+                b_file = str(pd.get("file_hash", "")).lower().strip()
+                if (target in (b_ocr, b_file) and target != "") and pd.get("type") in ("wallet_issue", "grant", "revoke"):
+                    out.append({**pd, "_block_index": block.index})
         return out
 
     # Legacy: old callers that pass a bare hash string
@@ -181,19 +186,25 @@ class Blockchain:
     def find_block_by_hash(self, cert_hash: str) -> dict | None:
         """
         Return the parsed block data dict for the document with this hash.
+        Checks both OCR field hash (cert_hash) and raw file SHA-256 hash (file_hash).
         Returns None if not found.
         """
         if not cert_hash:
             return None
         self._load()
-        target = str(cert_hash).lower()
+        target = str(cert_hash).lower().strip()
         for block in self.chain:
-            b_hash = str(block.cert_hash or "").lower()
-            if b_hash == target:
-                pd = block.parsed_data
+            pd = block.parsed_data
+            if pd:
+                b_ocr_hash  = str(pd.get("cert_hash", "")).lower().strip()
+                b_file_hash = str(pd.get("file_hash", "")).lower().strip()
+                if (target in (b_ocr_hash, b_file_hash)) and target != "":
+                    return {**pd, "_block_index": block.index, "_block_hash": block.hash}
+            # Legacy bare-hash block
+            b_hash = str(block.cert_hash or "").lower().strip()
+            if b_hash == target and target != "":
                 if pd:
                     return {**pd, "_block_index": block.index, "_block_hash": block.hash}
-                # Legacy bare-hash block
                 return {
                     "cert_hash":      block.cert_hash,
                     "zkp_proof":      "",
@@ -207,6 +218,7 @@ class Blockchain:
 
     def is_valid_hash(self, cert_hash: str) -> bool:
         return self.find_block_by_hash(cert_hash) is not None
+
 
 
     def get_all_document_blocks(self) -> list[dict]:

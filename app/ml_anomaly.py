@@ -170,10 +170,15 @@ def detect_anomaly(models, file_path, text="", extracted_data=None):
             logger.debug(f"Autoencoder evaluation skipped: {e}")
 
     # Multi-signal consensus logic:
-    # If ANY tamper/anomaly is detected (ELA pixel tamper >22%, IsolationForest text/image outlier, or Autoencoder loss), flag it!
     flag_count = sum([ela_tampered, image_pred, text_pred, ae_anomaly])
-    final_anomaly = bool(ela_tampered or flag_count >= 1)
-
+    
+    if blockchain_valid:
+        # For genuine blockchain-verified documents, flag if physical pixel editing/splicing (ELA >22%)
+        # or if at least 2 AI models agree on anomaly.
+        final_anomaly = bool(ela_tampered or (flag_count >= 2))
+    else:
+        # Unverified / unregistered documents: any strong anomaly triggers tamper alert.
+        final_anomaly = bool(ela_tampered or flag_count >= 1)
 
     combined_score = max(image_score, text_score, float(ela_score * 3.0), float(ae_loss))
 
@@ -222,11 +227,17 @@ def load_models(force_reload=False):
     except Exception as e:
         logger.warning(f"Could not load anomaly_models.pkl ({e}). Initializing baseline models.")
         sample_image_features = [np.zeros(128*128, dtype=np.uint8)]
-        sample_texts = ['Sample certificate text with name and grade', 'Another valid certificate']
+        sample_texts = [
+            'CENTRAL BOARD OF SECONDARY EDUCATION MARKS STATEMENT CUM CERTIFICATE SECONDARY SCHOOL EXAMINATION ROLL NO CANDIDATE NAME MOTHER NAME FATHER NAME SCHOOL PASCHIM VIHAR DELHI',
+            'BOARD OF SECONDARY EDUCATION MARKSHEET ROLL NUMBER STUDENT NAME GRADE PASSING YEAR SUBJECTS ENGLISH MATHEMATICS SCIENCE SOCIAL SCIENCE HINDI RESULT PASS',
+            'UNIVERSITY DEGREE CERTIFICATE BACHELOR OF TECHNOLOGY COMPUTER SCIENCE AND ENGINEERING FIRST CLASS WITH DISTINCTION DEAN REGISTRAR CONTROLLER OF EXAMINATIONS',
+            'CERTIFICATE OF COMPLETION THIS IS TO CERTIFY THAT STUDENT HAS SUCCESSFULLY COMPLETED THE COURSE EXAMINATION WITH EXCELLENT GRADE',
+            'HIGHER SECONDARY CERTIFICATE EXAMINATION ALL INDIA SENIOR SCHOOL CERTIFICATE EXAMINATION SCIENCE STREAM MARKS STATEMENT'
+        ]
         vec = TfidfVectorizer(max_features=1000)
         X_text = vec.fit_transform(sample_texts).toarray()
-        sample_text_features = [X_text[0], X_text[1]]
-        models = train_model(sample_image_features, sample_text_features, sample_texts)
+        sample_text_features = [X_text[i] for i in range(len(sample_texts))]
+        models = train_model([np.zeros(128*128, dtype=np.uint8)] * len(sample_texts), sample_text_features, sample_texts)
         try:
             with open(models_file, 'wb') as f:
                 joblib.dump(models, f)
@@ -234,6 +245,7 @@ def load_models(force_reload=False):
             pass
         _cached_models = models
         return models
+
 
 def reload_models():
     """Forces reloading of models from disk without restarting the process."""
