@@ -20,9 +20,47 @@ logger = logging.getLogger(__name__)
 
 wallet_bp = Blueprint('wallet', __name__)
 
+def resolve_user(identifier: str) -> User | None:
+    """
+    Flexibly resolve a user by:
+    1. Exact / case-insensitive local username (e.g. 'rudra', 'verifier')
+    2. Google email address (e.g. 'rudraksharma187@gmail.com')
+    3. Google display name (e.g. 'rudraksharma187')
+    4. Email prefix (e.g. 'rudraksharma187' from 'rudraksharma187@gmail.com')
+    """
+    if not identifier:
+        return None
+    ident = str(identifier).strip()
+    ident_lower = ident.lower()
+
+    # 1. Case-insensitive username match
+    user = User.query.filter(db.func.lower(User.username) == ident_lower).first()
+    if user:
+        return user
+
+    # 2. Case-insensitive Google email match
+    user = User.query.filter(db.func.lower(User.google_email) == ident_lower).first()
+    if user:
+        return user
+
+    # 3. Case-insensitive Google name match
+    user = User.query.filter(db.func.lower(User.google_name) == ident_lower).first()
+    if user:
+        return user
+
+    # 4. If email provided, match username by local-part
+    if '@' in ident:
+        local_part = ident.split('@')[0].replace('.', '_').replace('-', '_').lower()
+        user = User.query.filter(db.func.lower(User.username) == local_part).first()
+        if user:
+            return user
+
+    return None
+
+
 @wallet_bp.route('/wallet/setup', methods=['POST'])
 @login_required
-@role_required('citizen', 'verifier', 'admin')
+@role_required('citizen', 'verifier', 'institution', 'admin', 'superadmin')
 def setup_wallet():
     """Provision wallet keypair for citizen if not yet established."""
     try:
@@ -50,7 +88,7 @@ def setup_wallet():
 
 @wallet_bp.route('/wallet/my-documents', methods=['GET'])
 @login_required
-@role_required('citizen', 'verifier', 'admin')
+@role_required('citizen', 'verifier', 'institution', 'admin', 'superadmin')
 def my_documents():
     """Return list of metadata for documents owned by current citizen."""
     try:
@@ -77,22 +115,22 @@ def my_documents():
 
 @wallet_bp.route('/wallet/upload', methods=['POST'])
 @login_required
-@role_required('institution', 'admin')
+@role_required('institution', 'admin', 'superadmin')
 def upload_to_wallet():
     """Issuer uploads an opaque document directly to a citizen's wallet."""
     file = request.files.get('file')
     if not file or not file.filename:
         return jsonify({'error': 'No file provided.'}), 400
         
-    owner_username = request.form.get('owner_username', '').strip()
+    owner_input = request.form.get('owner_username', '').strip()
     doc_type = request.form.get('doc_type', 'Other').strip()
     
-    if not owner_username:
+    if not owner_input:
         return jsonify({'error': 'owner_username is required.'}), 400
         
-    owner_user = User.query.filter_by(username=owner_username).first()
+    owner_user = resolve_user(owner_input)
     if not owner_user:
-        return jsonify({'error': f'Citizen user "{owner_username}" not found.'}), 404
+        return jsonify({'error': f'Citizen user "{owner_input}" not found. Enter username or Google email.'}), 404
         
     issuer = session.get('username', 'institution')
     filename = secure_filename(file.filename)
@@ -109,6 +147,7 @@ def upload_to_wallet():
         return jsonify({
             'success': True,
             'document_id': doc.id,
+            'owner_username': owner_user.username,
             'cert_hash': doc.cert_hash,
             'block_index': doc.block_index
         })
@@ -119,14 +158,16 @@ def upload_to_wallet():
 
 @wallet_bp.route('/wallet/share', methods=['POST'])
 @login_required
-@role_required('citizen', 'verifier', 'admin')
+@role_required('citizen', 'verifier', 'institution', 'admin', 'superadmin')
 def share_document():
     """Citizen grants temporary access to a grantee agency/verifier."""
     data = request.get_json(silent=True) or {}
     doc_id = data.get('document_id')
-    grantee_username = data.get('grantee_username', '').strip()
+    grantee_input = data.get('grantee_username', '').strip()
     expires_at_str = data.get('expires_at')
-    if not doc_id or not grantee_username or not expires_at_str:
+    password = data.get('password') or request.form.get('password') or None
+
+    if not doc_id or not grantee_input or not expires_at_str:
         return jsonify({'error': 'document_id, grantee_username, and expires_at are required.'}), 400
         
     doc = db.session.get(Document, doc_id)
@@ -136,9 +177,12 @@ def share_document():
     if doc.owner_id != session['user_id']:
         return jsonify({'error': 'You do not own this document.'}), 403
         
-    grantee_user = User.query.filter_by(username=grantee_username).first()
+    grantee_user = resolve_user(grantee_input)
     if not grantee_user:
-        return jsonify({'error': f'Grantee user "{grantee_username}" not found.'}), 404
+        return jsonify({'error': f'Target user "{grantee_input}" not found. Enter a valid username or Google email.'}), 404
+
+    if grantee_user.id == session['user_id']:
+        return jsonify({'error': 'You already own this document.'}), 400
         
     try:
         # Parse ISO datetime
@@ -159,10 +203,12 @@ def share_document():
         return jsonify({
             'success': True,
             'grant_id': grant.id,
+            'grantee_username': grantee_user.username,
+            'grantee_email': grantee_user.google_email,
             'block_index': grant.granted_block_index
         })
     except ValueError as ve:
-        return jsonify({'error': str(ve)}), 403
+        return jsonify({'error': str(ve)}), 400
     except Exception as e:
         logger.error(f"Sharing document failed: {e}")
         return jsonify({'error': str(e)}), 500
@@ -170,7 +216,7 @@ def share_document():
 
 @wallet_bp.route('/wallet/revoke', methods=['POST'])
 @login_required
-@role_required('citizen', 'verifier', 'admin')
+@role_required('citizen', 'verifier', 'institution', 'admin', 'superadmin')
 def revoke_grant():
     """Citizen revokes a previously issued access grant."""
     data = request.get_json(silent=True) or {}
@@ -200,7 +246,7 @@ def revoke_grant():
 
 @wallet_bp.route('/wallet/my-grants', methods=['GET'])
 @login_required
-@role_required('citizen', 'verifier', 'admin')
+@role_required('citizen', 'verifier', 'institution', 'admin', 'superadmin')
 def my_grants():
     """List all access grants issued by the current citizen with computed status."""
     try:
@@ -229,6 +275,7 @@ def my_grants():
                 'document_id': doc.id if doc else None,
                 'original_filename': doc.original_filename if doc else 'Unknown',
                 'grantee_username': grantee.username if grantee else 'Unknown',
+                'grantee_email': getattr(grantee, 'google_email', None),
                 'expires_at': exp_utc.strftime('%Y-%m-%d %H:%M UTC'),
                 'revoked': g.revoked,
                 'status': status,
@@ -243,7 +290,7 @@ def my_grants():
 
 @wallet_bp.route('/wallet/received', methods=['GET'])
 @login_required
-@role_required('verifier', 'citizen', 'admin')
+@role_required('verifier', 'citizen', 'institution', 'admin', 'superadmin')
 def received_documents():
     """Verifier/agency lists non-expired, non-revoked documents shared to them."""
     try:
@@ -258,6 +305,7 @@ def received_documents():
             doc = db.session.get(Document, g.document_id)
             if not doc:
                 continue
+
                 
             exp_utc = g.expires_at if g.expires_at.tzinfo else g.expires_at.replace(tzinfo=timezone.utc)
             if exp_utc <= now:

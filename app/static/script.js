@@ -1001,13 +1001,11 @@ async function loadReceivedDocuments() {
 
 async function downloadWalletDoc(docId) {
   let pwd = '';
-  if (state.currentRole === 'citizen') {
-    pwd = prompt('Enter your wallet password to decrypt document:');
-    if (!pwd) return;
-  }
+  // Check if user wants to supply a custom passphrase (optional)
   const url = `/wallet/fetch/${docId}${pwd ? '?password=' + encodeURIComponent(pwd) : ''}`;
   window.open(url, '_blank');
 }
+
 
 async function loadAuditTrail(docId) {
   const overlay = document.getElementById('audit-modal-overlay');

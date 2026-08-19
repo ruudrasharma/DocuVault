@@ -486,18 +486,20 @@
       <input type="hidden" id="share-doc-id">
       <div style="display:flex;flex-direction:column;gap:16px">
         <div>
-          <label class="form-label">Target Agency / Verifier Username</label>
-          <input type="text" id="share-grantee" class="form-input" placeholder="e.g. verifier_agency">
+          <label class="form-label">Recipient Username or Google Email</label>
+          <input type="text" id="share-grantee" class="form-input" placeholder="e.g. verifier, user@gmail.com, or username">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">Works with local usernames and linked Google OAuth emails.</div>
         </div>
         <div>
           <label class="form-label">Expiration Date &amp; Time</label>
           <input type="datetime-local" id="share-expiry" class="form-input">
         </div>
         <div>
-          <label class="form-label">Wallet Password (Optional for Google SSO)</label>
-          <input type="password" id="share-password" class="form-input" placeholder="Account password (leave blank for Google SSO)">
+          <label class="form-label">Wallet Password (Optional / Blank for Google SSO)</label>
+          <input type="password" id="share-password" class="form-input" placeholder="Leave blank if using auto-managed wallet">
           <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px">Decrypts private key &amp; re-wraps DEK for grantee.</div>
         </div>
+
 
         <div id="share-err" class="flash-msg flash-error" style="display:none"></div>
 
