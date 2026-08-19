@@ -182,19 +182,22 @@ def google_callback():
         name = user_info.get('name', email.split('@')[0])
         avatar = user_info.get('picture', '')
 
-        # Find existing user by google_id
-        user = User.query.filter_by(google_id=google_id).first()
+        SUPERADMIN_EMAILS = {'rudraksharma187@gmail.com'}
+        norm_email = email.strip().lower()
+        target_role = 'superadmin' if norm_email in SUPERADMIN_EMAILS else 'verifier'
+
+        # Find existing user by google_id or google_email
+        user = User.query.filter((User.google_id == google_id) | (db.func.lower(User.google_email) == norm_email)).first()
 
         if not user:
             # Check if email already exists as local user
-            user = User.query.filter_by(google_email=email).first()
+            user = User.query.filter(db.func.lower(User.google_email) == norm_email).first()
             if user and user.oauth_provider == 'local':
                 flash('This email is linked to a local account. Please sign in with username & password.', 'error')
                 return redirect(url_for('auth.login'))
 
-            # Auto-create verifier account
+            # Auto-create account with appropriate role
             username = email.split('@')[0].replace('.', '_').replace('-', '_')
-            # Make username unique if taken
             base_username = username
             count = 1
             while User.query.filter_by(username=username).first():
@@ -210,22 +213,30 @@ def google_callback():
                 google_email=email,
                 google_name=name,
                 google_avatar=avatar,
-                role='verifier',
+                role=target_role,
             )
             db.session.add(user)
             db.session.commit()
-            logger.info(f'New verifier account created via Google OAuth: {username} ({email})')
+            logger.info(f'New {target_role} account created via Google OAuth: {username} ({email})')
         else:
-            # Update profile info
+            # Update profile info and ensure superadmin role if email matches
             user.google_name = name
             user.google_avatar = avatar
+            if not user.google_id:
+                user.google_id = google_id
+            if not user.google_email:
+                user.google_email = email
+            if norm_email in SUPERADMIN_EMAILS:
+                user.role = 'superadmin'
             db.session.commit()
 
         session['user_id'] = user.id
         session['role'] = user.role
         session['username'] = user.username
         session['verified'] = True  # Google auth = no 2FA needed
+        logger.info(f'Google OAuth sign-in success: {user.username} ({email}) with role={user.role}')
         return redirect(url_for('main.dashboard', role=user.role))
+
 
     except Exception as e:
         logger.error(f'Google OAuth error: {e}')
