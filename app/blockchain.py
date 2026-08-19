@@ -91,6 +91,58 @@ class Blockchain:
                 self._genesis()
         except (FileNotFoundError, json.JSONDecodeError):
             self._genesis()
+        self._sync_from_db()
+
+    def _sync_from_db(self):
+        """Ensure all valid CertificateRecords in DB have corresponding blocks on the blockchain ledger."""
+        try:
+            from .database_models import CertificateRecord as CertRecord
+            from .zkp import generate_zkp_proof, proof_to_hex
+            recs = CertRecord.query.filter_by(is_valid=True).all()
+            existing_hashes = {str(b.cert_hash).lower().strip() for b in self.chain if b.cert_hash}
+            for b in self.chain:
+                pd = b.parsed_data
+                if pd:
+                    if pd.get("cert_hash"):
+                        existing_hashes.add(str(pd.get("cert_hash")).lower().strip())
+                    if pd.get("file_hash"):
+                        existing_hashes.add(str(pd.get("file_hash")).lower().strip())
+
+            added = False
+            for r in recs:
+                target_hash = str(r.hash_value or "").lower().strip()
+                if target_hash and target_hash not in existing_hashes:
+                    meta = {}
+                    if r.encrypted_metadata:
+                        try:
+                            meta = json.loads(r.encrypted_metadata)
+                        except Exception:
+                            pass
+                    proof_hex = ""
+                    try:
+                        proof_hex = proof_to_hex(generate_zkp_proof(target_hash))
+                    except Exception:
+                        pass
+                    payload = {
+                        "cert_hash":      target_hash,
+                        "file_hash":      "",
+                        "zkp_proof":      proof_hex,
+                        "issuer":         r.institution or "admin",
+                        "issued_at":      time(),
+                        "fields_summary": meta.get("fields", {}),
+                    }
+                    prev = self.chain[-1]
+                    idx  = prev.index + 1
+                    ts   = time()
+                    h    = self._hash(idx, prev.hash, ts, payload)
+                    self.chain.append(Block(idx, prev.hash, ts, json.dumps(payload, sort_keys=True), h))
+                    existing_hashes.add(target_hash)
+                    added = True
+            if added:
+                self._save()
+                logger.info("Auto-synced blockchain with DB: total blocks now %d", len(self.chain))
+        except Exception as e:
+            logger.debug("Database sync to blockchain skipped/deferred: %s", e)
 
     def _save(self):
         try:
@@ -106,6 +158,7 @@ class Blockchain:
         h = self._hash(0, "0", ts, data)
         self.chain = [Block(0, "0", ts, data, h)]
         self._save()
+
 
     # ── Hashing ───────────────────────────────────────────────
     @staticmethod
