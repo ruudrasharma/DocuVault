@@ -844,58 +844,121 @@ body {
   left: 0;
   bottom: 0;
   width: 60px;
-  background: rgba(255,255,255,0.88);
+  background: rgba(255,255,255,0.92);
   backdrop-filter: blur(20px);
-  border-right: 1px solid rgba(15,23,42,0.07);
+  border-right: 1px solid rgba(15,23,42,0.08);
   z-index: 90;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 0;
-  gap: 4px;
-  transition: width 0.3s var(--ease-out);
-  box-shadow: 1px 0 16px rgba(15,23,42,0.04);
+  padding: 12px 0;
+  gap: 2px;
+  transition: width 0.28s cubic-bezier(0.16,1,0.3,1);
+  box-shadow: 2px 0 20px rgba(15,23,42,0.06);
+  /* no overflow:hidden so tooltips can escape */
 }
-.nav-ribbon:hover { width: 180px; }
+.nav-ribbon:hover { width: 200px; }
+
+/* ── Nav Item ─────────────────────────────────── */
 .nav-item {
-  width: 44px; height: 44px;
+  position: relative;
+  width: 44px;
+  height: 44px;
   border-radius: var(--r-md);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  position: relative;
   color: var(--text-muted);
-  transition: all 0.2s var(--ease-spring);
+  transition: all 0.2s cubic-bezier(0.16,1,0.3,1);
   text-decoration: none;
-  overflow: hidden;
   flex-shrink: 0;
+  /* Prevent icon from being clipped */
+  overflow: visible;
 }
-.nav-item:hover, .nav-item.active {
+
+/* Icon stays centred + visible when collapsed */
+.nav-item svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  z-index: 1;
+  transition: color 0.2s;
+}
+
+.nav-item:hover {
   background: var(--cyan-dim);
   color: var(--cyan);
   box-shadow: 0 0 0 1px var(--border-glow);
 }
+
+.nav-item.active {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--border-glow);
+}
+
+/* Active left-edge bar */
 .nav-item.active::before {
   content: '';
   position: absolute;
   left: -1px;
-  top: 50%; transform: translateY(-50%);
-  width: 3px; height: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
   background: linear-gradient(180deg, #4F46E5, #2563EB, #059669);
   border-radius: 0 3px 3px 0;
   box-shadow: 0 0 12px rgba(79,70,229,0.5);
 }
-.nav-ribbon:hover .nav-item { width: 156px; justify-content: flex-start; padding: 0 16px; gap: 12px; }
+
+/* Tooltip shown on collapsed sidebar */
+.nav-item::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(15,23,42,0.88);
+  color: #fff;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 200;
+}
+/* Show tooltip only when sidebar is collapsed (not hovered) */
+.nav-ribbon:not(:hover) .nav-item:hover::after { opacity: 1; }
+/* Hide tooltip when expanded */
+.nav-ribbon:hover .nav-item::after { display: none; }
+
+/* ── Expanded nav item ───────────────────────── */
+.nav-ribbon:hover .nav-item {
+  width: 176px;
+  justify-content: flex-start;
+  padding: 0 16px;
+  gap: 12px;
+}
+
+/* ── Label ────────────────────────────────────── */
 .nav-label {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   opacity: 0;
-  transform: translateX(-8px);
-  transition: opacity 0.2s, transform 0.2s;
+  transform: translateX(-6px);
+  transition: opacity 0.18s, transform 0.18s;
+  pointer-events: none;
 }
-.nav-ribbon:hover .nav-label { opacity: 1; transform: translateX(0); }
+.nav-ribbon:hover .nav-label {
+  opacity: 1;
+  transform: translateX(0);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    DASHBOARD CONTENT
