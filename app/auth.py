@@ -130,10 +130,8 @@ def verify_2fa():
             return redirect(url_for('main.dashboard', role=session['role']))
         flash('Invalid or expired OTP code. Try again.', 'error')
 
-    # Always show QR so user can (re-)scan if needed
-    qr_b64  = make_qr_base64(user.get_totp_uri())
-    totp_uri = user.get_totp_uri()
-    return render_template('verify_2fa.html', qr_b64=qr_b64, totp_uri=totp_uri, username=user.username)
+    return render_template('verify_2fa.html', username=user.username)
+
 
 
 @auth_bp.route('/logout', methods=['GET', 'POST'])
