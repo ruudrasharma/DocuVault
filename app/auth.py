@@ -61,11 +61,21 @@ def login():
     if 'user_id' in session:
         return redirect(url_for('main.dashboard', role=session.get('role', 'verifier')))
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
-        logger.info(f'Login attempt: username={username!r}')
+        # Support both AJAX JSON body and normal form POST
+        is_ajax = request.is_json or request.headers.get('Accept') == 'application/json'
+        if request.is_json:
+            data     = request.get_json(silent=True) or {}
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+        else:
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '').strip()
+
+        logger.info(f'Login attempt: username={username!r} ajax={is_ajax}')
 
         if not username or not password:
+            if is_ajax:
+                return jsonify({'error': 'Please enter both username and password'}), 400
             flash('Please enter both username and password', 'error')
             return render_template('login.html')
 
@@ -84,18 +94,27 @@ def login():
             except Exception as e:
                 db.session.rollback()
                 logger.error(f'Failed to create user {username!r}: {e}')
+                if is_ajax:
+                    return jsonify({'error': 'Error creating account'}), 500
                 flash('Error creating account', 'error')
                 return render_template('login.html')
 
         if not user.check_password(password):
             logger.warning(f'Login failed: wrong password for {username!r}')
+            if is_ajax:
+                return jsonify({'error': 'Invalid credentials — incorrect password'}), 401
             flash('Invalid credentials — incorrect password', 'error')
-        else:
-            session['user_id'] = user.id
-            session['role'] = user.role
-            session['username'] = user.username
-            logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
-            return redirect(url_for('auth.verify_2fa'))
+            return render_template('login.html')
+
+        # ── Success ──────────────────────────────────────────────
+        session['user_id']  = user.id
+        session['role']     = user.role
+        session['username'] = user.username
+        logger.info(f'Login success: {username!r} role={user.role!r} → verify_2fa')
+        if is_ajax:
+            return jsonify({'success': True, 'redirect': url_for('auth.verify_2fa')})
+        return redirect(url_for('auth.verify_2fa'))
+
     return render_template('login.html')
 
 
