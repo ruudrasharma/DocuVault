@@ -132,6 +132,42 @@ else
     ok ".env already exists — skipping"
 fi
 
+# ── Create Nginx config ───────────────────────────────────────────────────────
+log "Creating Nginx config for $APP_NAME..."
+if command -v nginx &>/dev/null; then
+    sudo tee /etc/nginx/sites-available/${APP_NAME} > /dev/null << EOF
+server {
+    listen 80 default_server;
+    server_name _ localhost;
+
+    client_max_body_size 50M;
+
+    # Buffer settings to prevent slow clients from blocking Gunicorn workers
+    proxy_buffering on;
+    proxy_buffer_size 16k;
+    proxy_buffers 8 16k;
+
+    location / {
+        proxy_pass http://127.0.0.1:$APP_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 120s;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+    }
+}
+EOF
+    sudo ln -sf /etc/nginx/sites-available/${APP_NAME} /etc/nginx/sites-enabled/${APP_NAME}
+    sudo nginx -t && sudo systemctl reload nginx
+    ok "Nginx config created and reloaded"
+else
+    warn "Nginx not found — skipping Nginx config (app will be accessible directly on port $APP_PORT)"
+fi
+
 # ── Create systemd service ────────────────────────────────────────────────────
 log "Creating systemd service: $APP_NAME..."
 sudo tee /etc/systemd/system/${APP_NAME}.service > /dev/null << EOF
@@ -146,9 +182,13 @@ User=$SERVICE_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
 ExecStart=$VENV_DIR/bin/gunicorn \
-    --workers 2 \
+    --workers 4 \
+    --worker-class gthread \
+    --threads 2 \
     --bind 0.0.0.0:$APP_PORT \
     --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
     --access-logfile $APP_DIR/access.log \
     --error-logfile $APP_DIR/error.log \
     "run:app"
